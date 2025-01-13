@@ -1,0 +1,10 @@
+{
+    "data_processor_type":"income", 
+    "output_csv_name":"income_60epoch.csv", 
+    "num_clusters":4, 
+    "num_epochs":60, 
+    "model_path":"best_census_income_model_inc.h5", 
+    "output_model_results": "income_state_clusters.txt",
+    "num_var_reg":0, 
+    "seed_num":0
+}

@@ -1,0 +1,12 @@
+data/
+notebooks/.ipynb_checkpoints/
+notebooks/data/
+notebooks/models/
+notebooks/
+.DS_Store
+notebooks/features.npy
+notebooks/testing_data.ipynb
+notebooks/log_census.txt
+.ipynb_checkpoints/
+waterbirds_data/
+waterbirds_features/

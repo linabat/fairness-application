@@ -1,0 +1,5 @@
+{
+    "covid_fp":"unit_test_data/mock_census_data.csv", 
+    "replace_num":[98], 
+    "gmm_covid_ts":0.2
+}

@@ -1,0 +1,6 @@
+{
+    "covid_fp":"data/covid_data.csv", 
+    "replace_num":[98], 
+    "gmm_covid_ts":0.2, 
+    "gmm_adult_ts":0.2
+}

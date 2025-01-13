@@ -1,0 +1,10 @@
+{
+    "data_processor_type":"public_coverage", 
+    "output_csv_name":"public_coverage_60epoch.csv", 
+    "num_clusters":4, 
+    "num_epochs":60, 
+    "model_path":"best_census_pc_model_inc.h5", 
+    "output_model_results": "public_coverage_state_clusters.txt",
+    "num_var_reg":0, 
+    "seed_num":0
+}

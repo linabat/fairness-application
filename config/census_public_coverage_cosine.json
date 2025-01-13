@@ -1,0 +1,4 @@
+{
+    "census_data_csv_path":"census_retrieved_data/public_coverage_60epoch.csv", 
+    "cosine_census_path_name":"cosine_public_coverage.png"
+}

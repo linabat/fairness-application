@@ -1,0 +1,10 @@
+{
+    "data_processor_type":"employment", 
+    "output_csv_name":"employment_60epoch.csv", 
+    "num_clusters":4, 
+    "num_epochs":60, 
+    "model_path":"best_census_employment_model_inc.h5", 
+    "output_model_results": "employment_state_clusters.txt",
+    "num_var_reg":0, 
+    "seed_num":0
+}
