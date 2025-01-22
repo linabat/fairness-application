@@ -32,7 +32,6 @@ from tensorflow.keras.constraints import Constraint
 from tensorflow.keras.optimizers import Adam
 from keras.initializers import Constant
 
-from tensorflow.keras.datasets import mnist
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import (
     confusion_matrix,
@@ -63,34 +62,17 @@ from tensorflow.keras.callbacks import (
     ModelCheckpoint,
     LearningRateScheduler
 )
-from tensorflow.keras.initializers import RandomUniform
-from tensorflow.keras.regularizers import l1, l2
-from tensorflow.keras.constraints import Constraint
-from tensorflow.keras.optimizers import Adam
-from keras.initializers import Constant
 
-from tensorflow.keras.datasets import mnist
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import (
-    confusion_matrix,
-    roc_auc_score,
-    accuracy_score
-)
 
 from tensorflow.keras.regularizers import Regularizer
 
-from tensorflow.keras.regularizers import Regularizer 
 from folktables import ACSDataSource, ACSIncome, ACSEmployment, ACSPublicCoverage
 from sklearn.preprocessing import LabelEncoder
 from tensorflow.keras.models import Sequential, Model
 from keras.models import load_model
 from tensorflow.keras.layers import Dense, Dropout
-from tensorflow.keras.optimizers import Adam
-from tensorflow.keras.constraints import Constraint
-from tensorflow.keras.regularizers import Regularizer
 from tensorflow.keras.callbacks import LearningRateScheduler, ModelCheckpoint
 from tensorflow.keras.utils import to_categorical
-from tensorflow.keras.initializers import RandomUniform
 import tensorflow as tf
 import random
 
@@ -112,189 +94,25 @@ repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
 # Compass Pre-Processing
 
+### CHANGE - BUT COME BACK TO AT THE END 
 def load_compas_data_binarized(data_path):
     
-    df = pd.read_csv(data_path, 
-                     parse_dates = ['DateOfBirth'])    
-    # Drop these case-specific columns:
-    # - Person_ID
-    # - AssessmentID
-    # - Case_ID
-    # - LastName
-    # - FirstName
-    # - MiddleName
-    # 
-    # Drop these columns:
-    # - `Screening_Date`: We don't know how to categorize this
-    # - `RecSupervisionLevelText`: same as `RecSupervisionLevel`
-    # - `RawScore`: many values. seems to be used for computation of target value
-    # - `DecileScore`: seems to be used for computation of target value
-    # - `IsCompleted`: same value for everyone
-    # - `IsDeleted`: same value for everyone
-        
-    removed_columns = [
-        'Person_ID',
-        'AssessmentID',
-        'Case_ID',
-        'LastName',
-        'FirstName',
-        'MiddleName',
-        'Screening_Date',
-        'RecSupervisionLevelText',
-        'RawScore',
-        'DecileScore',
-        'IsCompleted',
-        'IsDeleted'
-    ]
-    df.drop(removed_columns, axis=1, inplace=True)
+    df = pd.read_csv(data_path)    
+    
+# "ScoreText_" is being used as the sensitive feature
 
-    age = (datetime.datetime.now() - df.DateOfBirth).astype('timedelta64[Y]')
-    age = age.astype('int')
-    age[age<0] = np.nan
-    df['age_'] = age
-    
-    # dealing with missing values
-    df.drop(df[df['ScoreText'].isnull()].index, inplace=True)
-    df.drop(df[df['age_'].isnull()].index, inplace=True)
-    df.drop(df[df['MaritalStatus']=='Unknown'].index, inplace=True)
-    
-    get_ipython().magic('matplotlib inline')
-    hist = df['age_'].hist()
-    df['age_'].mean()
-    
-    age_bins = [0, 22, 100]
-    age_groups = pd.cut(df['age_'], bins=age_bins)
-        
-    df.groupby('Ethnic_Code_Text').count()
-    
-    df['CustodyStatus_'] = -1
-    mask = df['CustodyStatus']=='Jail Inmate'
-    df.loc[mask, 'CustodyStatus_'] = 0
-    df.loc[~mask, 'CustodyStatus_'] = 1
-    
-    df['LegalStatus_'] = -1
-    mask = df['LegalStatus']=='Post Sentence'
-    df.loc[mask, 'LegalStatus_'] = 0
-    df.loc[~mask, 'LegalStatus_'] = 1
-    
-    df['RecSupervisionLevel_'] = -1
-    mask = df['RecSupervisionLevel'].isin((1, 2))
-    df.loc[mask, 'RecSupervisionLevel_'] = 0
-    df.loc[~mask, 'RecSupervisionLevel_'] = 1
-    
-    df['Ethnic_Code_Text_'] = -1
-    mask = df['Ethnic_Code_Text']=='Caucasian'
-    df.loc[mask, 'Ethnic_Code_Text_'] = 0
-    df.loc[~mask, 'Ethnic_Code_Text_'] = 1
-    
-    df['MaritalStatus_'] = -1
-    mask = df['MaritalStatus'].isin(('Married', 'Significant Other'))
-    df.loc[mask, 'MaritalStatus_'] = 0
-    df.loc[~mask, 'MaritalStatus_'] = 1
-    
-    age_bins = [0, 30, 100]
-    age_groups = pd.cut(df['age_'], bins=age_bins)
-    df['Age'] = age_groups
-    num_groups = len(df['Age'].cat.categories)
-    df['Age'] = df['Age'].cat.rename_categories(range(num_groups))
-    get_ipython().magic('matplotlib inline')
-    hist = df['Age'].hist()
-    
-    df['ScoreText_'] = -1
-    mask = df['ScoreText']=='High'
-    df.loc[mask, 'ScoreText_'] = 0
-    df.loc[~mask, 'ScoreText_'] = 1
-    
-    df['Sex_'] = -1
-    mask = df['Sex_Code_Text']=='Male'
-    df.loc[mask, 'Sex_'] = 0
-    df.loc[~mask, 'Sex_'] = 1    
-    
-    df.drop(['DisplayText', 'Sex_Code_Text', 'ScoreText','Agency_Text', 'AssessmentType', 'ScaleSet_ID', 'ScaleSet', 'AssessmentReason', 'Language'], axis=1, inplace=True)
-    df.drop(['DateOfBirth', 'age_', 'MaritalStatus', 'Ethnic_Code_Text', 'RecSupervisionLevel','CustodyStatus','LegalStatus', 'Scale_ID'], axis=1, inplace=True)
-
-    binarized_path = os.path.join(repor_root,'data','compass_binerized.csv') 
-    df.to_csv(binarized_path, index=False)
-
-    labels = df["ScoreText_"]
-    eg_from_df = df["Ethnic_Code_Text"].to_numpy()
-    features = df.drop(columns="ScoreText_", "Ethnic_Code_Text")
-    return features, labels, eg_from_df
-
-# "ScoreText_"
-
+### CHANGE - BUT COME BACK TO AT THE END 
 def load_compas_data_pcategorizing(data_path):
 
-    df = pd.read_csv(data_path, 
-                     parse_dates = ['DateOfBirth'])
-    
-    removed_columns = [
-        'Person_ID',
-        'AssessmentID',
-        'Case_ID',
-        'LastName',
-        'FirstName',
-        'MiddleName',
-        'Screening_Date',
-        'RecSupervisionLevelText',
-        'RawScore',
-        'DecileScore',
-        'IsCompleted',
-        'IsDeleted'
-    ]
-    df.drop(removed_columns, axis=1, inplace=True)
-
-    age = (datetime.datetime.now() - df.DateOfBirth).astype('timedelta64[Y]')
-    age = age.astype('int')
-    age[age<0] = np.nan
-    df['age_'] = age
-    
-    df.drop(df[df['ScoreText'].isnull()].index, inplace=True)
-    df.drop(df[df['age_'].isnull()].index, inplace=True)
-    df.drop(df[df['MaritalStatus']=='Unknown'].index, inplace=True)
-    
-    age_bins = [0, 30, 100]
-    age_groups = pd.cut(df['age_'], bins=age_bins)
-    df['Age'] = age_groups
-    num_groups = len(df['Age'].cat.categories)
-    df['Age'] = df['Age'].cat.rename_categories(range(num_groups))
-    
-    df.Sex_Code_Text = pd.Categorical(df.Sex_Code_Text)
-    df['Sex_Code_Text'] = df.Sex_Code_Text.cat.codes
-    
-    df.Ethnic_Code_Text = pd.Categorical(df.Ethnic_Code_Text)
-    df['Ethnic_Code_Text'] = df.Ethnic_Code_Text.cat.codes
-    
-    df.MaritalStatus = pd.Categorical(df.MaritalStatus)
-    df['MaritalStatus'] = df.MaritalStatus.cat.codes
-    
-    df.CustodyStatus = pd.Categorical(df.CustodyStatus)
-    df['CustodyStatus'] = df.CustodyStatus.cat.codes
-    
-    df.LegalStatus = pd.Categorical(df.LegalStatus)
-    df['LegalStatus'] = df.LegalStatus.cat.codes
-    
-    df['ScoreText_'] = -1
-    mask = df['ScoreText']=='High'
-    df.loc[mask, 'ScoreText_'] = 0
-    df.loc[~mask, 'ScoreText_'] = 1    
-    
-    df.drop(['DisplayText','ScoreText','Agency_Text', 'AssessmentType', 'ScaleSet_ID', 'ScaleSet', 'AssessmentReason', 'Language'], axis=1, inplace=True)
-    df.drop(['DateOfBirth', 'age_', 'Scale_ID'], axis=1, inplace=True)
-  
-    categorized_path = os.path.join(repor_root,'data','compass_categorized.csv') 
-    df.to_csv(categorized_path, index=False)
-
-    labels = df["ScoreText_"]
-    eg_from_df = df["Ethnic_Code_Text"].to_numpy()
-    features = df.drop(columns="ScoreText_", "Ethnic_Code_Text")
-    return features, labels, eg_from_df
-
+    df = pd.read_csv(data_path)
+ 
 # Clustering method - Parjanya's code 
 
 # ===========================
 # Helper Classes
 # ===========================
+
+### DON'T CHANGE
 class ClipConstraint(Constraint):
     """
     Clips model weights to a given range [min_value, max_value].
@@ -310,6 +128,7 @@ class ClipConstraint(Constraint):
     def get_config(self):
         return {'min_value': self.min_value, 'max_value': self.max_value}
 
+### DON'T CHANGE
 class VarianceRegularizer(Regularizer):
     """
     Custom regularizer for maximum weight variance.
@@ -332,6 +151,8 @@ class VarianceRegularizer(Regularizer):
 # ===========================
 
 ## add sensitvite variable - need independence between sensitive and latent are independent -- modify the training 
+
+### DON'T CHANGE
 def lr_schedule(epoch):
     """Defines the learning rate schedule."""
     if epoch < 20:
@@ -339,6 +160,21 @@ def lr_schedule(epoch):
     else:
         return 1e-5
 
+
+
+# need to directly enfource indpeende between the observed decision variable D and senstivie attributes S  -- can enfource indpendent by setting the latent variable D_f to 
+# always be equal to D -- results in marginal distribution over S, X, D 
+# D is the outcome that is influence by S and X
+
+def enforce_independent(X,s,d): 
+    
+    
+
+### CHANGE
+# WE HAVE X -- ALL THE FEATURES 
+# s = proxy variable 
+# n_z = number of clusters
+# need to add D = observed variable, D_f is the latent variable that we adjust for 
 def get_model_z(X,s,n_z,model_name,epochs=20,verbose=1,var_reg=0.0):
     """
     Defines and trains a clustering model. 
@@ -386,6 +222,7 @@ def get_model_z(X,s,n_z,model_name,epochs=20,verbose=1,var_reg=0.0):
     best_model = load_model(model_checkpoint_path, custom_objects={'ClipConstraint': ClipConstraint,'VarianceRegularizer': VarianceRegularizer})
     return best_model
 
+# CHANGE
 def pzx(X,best_model,arg_max=True):
     """
     Predict cluster assignments
@@ -396,6 +233,7 @@ def pzx(X,best_model,arg_max=True):
         p = np.argmax(p,axis=1)
     return p
 
+### DON'T CHANGE
 def set_seed(seed_num): 
     # Set random seed for reproducibility
     seed = seed_num
@@ -408,6 +246,7 @@ def set_seed(seed_num):
 # Census Data Set
 # ===========================
 
+# CHANGE 
 def run_compas(data_path, output_csv_name, output_model_results, num_clusters=2, num_epochs=40, model_path='best_census_model_inc.h5', num_var_reg=0, seed_num=0):
     
     set_seed(seed_num)
@@ -456,107 +295,5 @@ def run_compas(data_path, output_csv_name, output_model_results, num_clusters=2,
         for cluster, states in cluster_groups.items():
             eg_list = ", ".join(ethnic_group)
             file.write(f"Cluster {cluster}: = [{eg_list}]\n")
-
-
-# def run_census_cosine(census_data_csv_path, cosine_census_path_name): 
-#     """
-#     census_data_csv_path : should be the one after run_census - will be in the census_retrieved_data folder
-#     output_cosine_census_results_path : just the name of the jaccard plot - should be .png and indicate data processor
-#     """
-#     census_data = pd.read_csv(census_data_csv_path) 
-    
-#     # Rename column if necessary
-#     census_data = census_data.rename(columns={"p1_tr": "cluster"})
-    
-#     # Create a binary matrix for states and clusters
-#     state_cluster_matrix = pd.crosstab(census_data['states'], census_data['cluster'])
-    
-#     # Convert to a numpy array to calculate distances
-#     state_cluster_matrix_array = state_cluster_matrix.values
-    
-#     # Calculate the pairwise Cosine similarity between states
-#     cosine_sim_matrix = cosine_similarity(state_cluster_matrix_array)
-    
-#     # Convert the result to a DataFrame for better readability
-#     cosine_sim_df = pd.DataFrame(cosine_sim_matrix, index=state_cluster_matrix.index, columns=state_cluster_matrix.index)
-    
-#     # Plot the cosine similarity matrix as a heatmap
-#     plt.figure(figsize=(15, 8))
-#     sns.heatmap(cosine_sim_df, annot=False, cmap="Blues", cbar=True, xticklabels=True, yticklabels=True)
-#     plt.title('State Similarity Based on Clusters (Cosine Similarity)')
-    
-#     # Save the plot as a PNG file
-#     output_folder = os.path.join(repo_root, "census_image_results")
-#     os.makedirs(output_folder, exist_ok=True)
-#     output_file = os.path.join(output_folder, cosine_census_path_name)
-#     plt.savefig(output_file)
-
-
-# def load_compas_data(data_path, seed_num=0):
-#    """
-#    Loading compas data
-#    """
-#     set_seed(seed_num)
-#     data = pd.read_csv(data_path)
-
-#     # Remove unique and duplicate features
-#     data = data.loc[:, ~data.columns.duplicated()]
-#     unique_threshold = len(data) * 0.95  # 95% unique threshold
-#     data = data.loc[:, data.nunique() < unique_threshold]
-
-#     # Remove rows with low-frequency counts in categorical columns
-#     for col in data.select_dtypes(include='object').columns:
-#         value_counts = data[col].value_counts()
-#         valid_values = value_counts[value_counts >= low_freq_threshold].index
-#         data = data[data[col].isin(valid_values)]
-
-#     ethnic_groups = data["Ethnic_Code_Text"].unique()
-
-#     ## GRAB ONLY CERTAIN AMOUNT FROM EACH ETHNIC GROUP
-#     ## FOR EACH Ethinic Group, APPLY MIN, MAX SCALER (both)
-#     min_row_count = data.groupby("Ethnic_Code_Text").size().min()
-
-#     # Sample the minimum number of rows for each state
-#     balanced_data = pd.DataFrame()
-#     for eg in ethnic_groups:
-#         eg_data = data[data['Ethnic_Code_Text'] == eg]
-#         if len(eg_data) >= min_row_count:
-#             sampled_data = eg_data.sample(n=min_row_count)
-#             balanced_data = pd.concat([balanced_data, sampled_data], ignore_index=True)
-
-#     # Encode state labels
-#     label_encoder = LabelEncoder()
-#     eg_from_df = balanced_data["Ethnic_Code_Text"].to_numpy()
-#     balanced_data['eg_encoded'] = label_encoder.fit_transform(balanced_data['Ethnic_Code_Text'])
-#     labels = balanced_data["eg_encoded"].to_numpy()
-    
-#     features = balanced_data.drop(columns=["Ethnic_Code_Text", "eg_encoded"]).to_numpy()
-#     standard_scaler = StandardScaler()
-#     features_standardized = standard_scaler.fit_transform(features)
-
-#     minmax_scaler = MinMaxScaler()
-#     features_scaled = minmax_scaler.fit_transform(features_standardized)
-
-#     return features_scaled, labels, eg_from_df
-        
-
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
     
     
