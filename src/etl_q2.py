@@ -63,7 +63,6 @@ from tensorflow.keras.callbacks import (
     LearningRateScheduler
 )
 
-
 from tensorflow.keras.regularizers import Regularizer
 
 from folktables import ACSDataSource, ACSIncome, ACSEmployment, ACSPublicCoverage
@@ -90,7 +89,6 @@ import tarfile
 
 # This will be used when saving the files
 repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-
 
 # Compass Pre-Processing
 
@@ -162,12 +160,12 @@ def lr_schedule(epoch):
 
 
 
-# need to directly enfource indpeende between the observed decision variable D and senstivie attributes S  -- can enfource indpendent by setting the latent variable D_f to 
+# need to directly enforce independence between the observed decision variable D and senstivie attributes S  -- can enfource indpendent by setting the latent variable D_f to 
 # always be equal to D -- results in marginal distribution over S, X, D 
 # D is the outcome that is influence by S and X
 
 
-def enforce_independent(X,s,d): 
+# def enforce_independent(X,s,d):  ### DO WE EVEN NEED THIS???
     
     
 ### CHANGE
@@ -175,10 +173,16 @@ def enforce_independent(X,s,d):
 # s = proxy variable 
 # n_z = number of clusters
 # need to add D = observed variable, D_f is the latent variable that we adjust for 
-def get_model_z(X,s,n_z,model_name,epochs=20,verbose=1,var_reg=0.0):
+
+
+# IN THIS CASE d is our proxy 
+# S is the new senstive variable that we are adding in and then we need to establish indpendence with s and d?????? cause there was an assumption that was mde that D_f = D, which enforces the indpendence of D and S 
+def get_model_z(X,d,s,n_z,model_name,epochs=20,verbose=1,var_reg=0.0):
     """
     Defines and trains a clustering model. 
     """
+    # Ensuring that d and s are independent of each other 
+    
     #Shuffle X and s together
     indices = np.arange(X.shape[0])
     np.random.shuffle(indices)
@@ -186,7 +190,7 @@ def get_model_z(X,s,n_z,model_name,epochs=20,verbose=1,var_reg=0.0):
     lr_scheduler = LearningRateScheduler(lr_schedule, verbose=1) # added this in here isntead
     
     X = X[indices]
-    s = s[indices]
+    d = d[indices]
     model = Sequential([
         Dense(1024, activation='relu', input_shape=(X.shape[1],)),
         Dropout(0.5),
@@ -212,7 +216,7 @@ def get_model_z(X,s,n_z,model_name,epochs=20,verbose=1,var_reg=0.0):
     
     model.fit(
         X,
-        s,
+        d,
         batch_size=1024,
         epochs=epochs,
         validation_split=0.1,
@@ -261,8 +265,7 @@ def run_compas(data_path, output_csv_name, output_model_results, num_clusters=2,
     cluster_eg_df = pd.DataFrame({
         "cluster":p1_tr,
         "ethnic_group":states_from_df, 
-        }
-        )
+        })
 
     # Save the DataFrame to a CSV file
     output_folder = os.path.join(repo_root, "eg_retrieved_data")
