@@ -166,10 +166,10 @@ def lr_schedule(epoch):
 # always be equal to D -- results in marginal distribution over S, X, D 
 # D is the outcome that is influence by S and X
 
+
 def enforce_independent(X,s,d): 
     
     
-
 ### CHANGE
 # WE HAVE X -- ALL THE FEATURES 
 # s = proxy variable 
