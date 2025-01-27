@@ -90,19 +90,108 @@ import tarfile
 # This will be used when saving the files
 repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
+def create_pcat_compass(raw_data_path): 
+    df = pd.read_csv('raw_data_path', 
+                     parse_dates = ['DateOfBirth'])
+    
+    removed_columns = [
+        'Person_ID',
+        'AssessmentID',
+        'Case_ID',
+        'LastName',
+        'FirstName',
+        'MiddleName',
+        'Screening_Date',
+        'RecSupervisionLevelText',
+        'RawScore',
+        'DecileScore',
+        'IsCompleted',
+        'IsDeleted'
+    ]
+    df.drop(removed_columns, axis=1, inplace=True)
+
+    age = ((pd.Timestamp.now() - df['DateOfBirth']).dt.days / 365.25).astype(int)
+    age[age<0] = np.nan
+    df['age_'] = age
+    
+    
+    df.drop(df[df['ScoreText'].isnull()].index, inplace=True)
+    df.drop(df[df['age_'].isnull()].index, inplace=True)
+    df.drop(df[df['MaritalStatus']=='Unknown'].index, inplace=True)
+    
+    
+    age_bins = [0, 30, 100]
+    age_groups = pd.cut(df['age_'], bins=age_bins)
+    df['Age'] = age_groups
+    num_groups = len(df['Age'].cat.categories)
+    df['Age'] = df['Age'].cat.rename_categories(range(num_groups))
+    
+    
+    df.Sex_Code_Text = pd.Categorical(df.Sex_Code_Text)
+    df['Sex_Code_Text'] = df.Sex_Code_Text.cat.codes
+
+    df["Ethnic_Code_Raw"] = df["Ethnic_Code_Text"]
+    df.Ethnic_Code_Text = pd.Categorical(df.Ethnic_Code_Text)
+    df['Ethnic_Code_Text'] = df.Ethnic_Code_Text.cat.codes
+    
+    df.MaritalStatus = pd.Categorical(df.MaritalStatus)
+    df['MaritalStatus'] = df.MaritalStatus.cat.codes
+    
+    df.CustodyStatus = pd.Categorical(df.CustodyStatus)
+    df['CustodyStatus'] = df.CustodyStatus.cat.codes
+    
+    df.LegalStatus = pd.Categorical(df.LegalStatus)
+    df['LegalStatus'] = df.LegalStatus.cat.codes
+    
+    df['ScoreText_'] = -1
+    mask = df['ScoreText']=='High'
+    df.loc[mask, 'ScoreText_'] = 0
+    df.loc[~mask, 'ScoreText_'] = 1
+    
+    
+    df.drop(['DisplayText','ScoreText','Agency_Text', 'AssessmentType', 'ScaleSet_ID', 'ScaleSet', 'AssessmentReason', 'Language'], axis=1, inplace=True)
+    df.drop(['DateOfBirth', 'age_', 'Scale_ID'], axis=1, inplace=True)
+    
+    
+    df.to_csv('data/compass_categorized.csv')
+
+
 # Compass Pre-Processing
 
-### CHANGE - BUT COME BACK TO AT THE END 
 def load_compas_data_binarized(data_path):
-    
+    """
+    Retrieving X, s and d from original cleaned data 
+    Ethnicity is 0 for Caucasian, 1 for non-caucasian
+    """
     df = pd.read_csv(data_path)    
-    
-# "ScoreText_" is being used as the sensitive feature
+
+    # "Ethinic_Code_Text" is being used as the sensitive feature
+    # Observed label D is "ScoreText_"
+
+    labels = df["ScoreText_"]
+    features = df[~df["ScoreText_"]
+
+    # adding a column that indicates what type
+    def get_ethn(val):
+        if val == 0: 
+            return "Caucasian"
+        else: 
+            return "Other"
+
+    df["ethn_from_df"] = df.apply(get_ethn, axis = 1)
+
+    return features, labels, ethn_from_df
 
 ### CHANGE - BUT COME BACK TO AT THE END 
 def load_compas_data_pcategorizing(data_path):
+    df = pd.read_csv(data_path)    
+    ethn_from_df = df["Ethnic_Code_Raw"] 
+    labels = df["ScoreText_"]
+    features = df[~df["ScoreText_", "Ethnic_Code_Raw"]]
 
-    df = pd.read_csv(data_path)
+    # adding a column that indicates what type
+    
+    return features, labels, ethn_from_df
  
 # Clustering method - Parjanya's code 
 
@@ -110,7 +199,6 @@ def load_compas_data_pcategorizing(data_path):
 # Helper Classes
 # ===========================
 
-### DON'T CHANGE
 class ClipConstraint(Constraint):
     """
     Clips model weights to a given range [min_value, max_value].
@@ -126,7 +214,6 @@ class ClipConstraint(Constraint):
     def get_config(self):
         return {'min_value': self.min_value, 'max_value': self.max_value}
 
-### DON'T CHANGE
 class VarianceRegularizer(Regularizer):
     """
     Custom regularizer for maximum weight variance.
@@ -177,7 +264,21 @@ def lr_schedule(epoch):
 
 # IN THIS CASE d is our proxy 
 # S is the new senstive variable that we are adding in and then we need to establish indpendence with s and d?????? cause there was an assumption that was mde that D_f = D, which enforces the indpendence of D and S 
-def get_model_z(X,d,s,n_z,model_name,epochs=20,verbose=1,var_reg=0.0):
+
+# D is ScoreText_  which is binary 
+# S is Ethinic_Code_Text which is also binary 
+
+# Need to add independence regularizer 
+# get the latent representation for target_layer and make it independent from S 
+## adversarial learning -- need to add regularizer to the loss function
+
+### our case ScoreText is S (proxy) 
+# def get_model_z(X,d,s,n_z,model_name,epochs=20,verbose=1,var_reg=0.0): # wrong header
+
+## pass the code in as is 
+## READ THE PAPER FIRST 
+
+def get_model_z(X,s,n_z,model_name,epochs=20,verbose=1,var_reg=0.0):
     """
     Defines and trains a clustering model. 
     """
@@ -190,7 +291,7 @@ def get_model_z(X,d,s,n_z,model_name,epochs=20,verbose=1,var_reg=0.0):
     lr_scheduler = LearningRateScheduler(lr_schedule, verbose=1) # added this in here isntead
     
     X = X[indices]
-    d = d[indices]
+    s = s[indices]
     model = Sequential([
         Dense(1024, activation='relu', input_shape=(X.shape[1],)),
         Dropout(0.5),
@@ -199,8 +300,8 @@ def get_model_z(X,d,s,n_z,model_name,epochs=20,verbose=1,var_reg=0.0):
         Dense(128, activation='relu'),
         Dense(64, activation='relu'),
         Dense(s.shape[1], activation='linear'),
-        Dense(n_z, activation='softmax', name='target_layer'),
-        Dense(s.shape[1], activation='linear', use_bias=False,kernel_initializer=RandomUniform(minval=0, maxval=1),kernel_constraint=ClipConstraint(0, 1), kernel_regularizer=VarianceRegularizer(factor=var_reg)), 
+        Dense(n_z, activation='softmax', name='target_layer'), ## THIS IS THE LAYER THAT WE NEED TO GRAB TO ESTABLISH THE INDEPENDENCE
+        Dense(s.shape[1], activation='linear', use_bias=False, kernel_initializer=RandomUniform(minval=0, maxval=1),kernel_constraint=ClipConstraint(0, 1), kernel_regularizer=VarianceRegularizer(factor=var_reg)), 
     ])
     optimizer = Adam(learning_rate=1e-3) # an adaptive learning rate optimizer
     model.compile(optimizer=optimizer, loss='categorical_crossentropy', metrics=['accuracy'])
@@ -216,7 +317,7 @@ def get_model_z(X,d,s,n_z,model_name,epochs=20,verbose=1,var_reg=0.0):
     
     model.fit(
         X,
-        d,
+        s,
         batch_size=1024,
         epochs=epochs,
         validation_split=0.1,
@@ -255,28 +356,28 @@ def run_compas(data_path, output_csv_name, output_model_results, num_clusters=2,
     
     set_seed(seed_num)
 
-    features, labels, eg_from_df = load_compas_data_pcategorizing(data_path)
-    s1 = to_categorical(labels)
-    best_model = get_model_z(features, s1, num_clusters, model_path, num_epochs, num_var_reg)
+    features, labels, ethn_from_df = load_compas_data_binarized(data_path)
+    # labels are already binarized
+    best_model = get_model_z(features, labels, num_clusters, model_path, num_epochs, num_var_reg)
 
     p1_tr = pzx(features, best_model, arg_max=True)
 
     
     cluster_eg_df = pd.DataFrame({
         "cluster":p1_tr,
-        "ethnic_group":states_from_df, 
+        "ethnic_group":ethn_from_df, 
         })
 
     # Save the DataFrame to a CSV file
-    output_folder = os.path.join(repo_root, "eg_retrieved_data")
+    output_folder = os.path.join(repo_root, "compass_binarized_retrieved_data")
     os.makedirs(output_folder, exist_ok=True)
     output_csv_path = os.path.join(output_folder, output_csv_name)
     cluster_state_df.to_csv(output_csv_path, index=False)
 
-    # Group by 'states' and 'cluster', then count the occurrences of each cluster for each state
+    # Group by 'ethinic group' and 'cluster', then count the occurrences of each cluster for each ethnic grouup
     cluster_counts = cluster_eg_df.groupby(["ethnic_group", "cluster"]).size().reset_index(name='count')
     
-    # Calculate the total count for each state
+    # Calculate the total count for each 
     eg_totals = eg_state_df.groupby("ethnic_group")["cluster"].count().reset_index(name='total')
     
     # Merge the counts with the total counts per state
@@ -286,8 +387,6 @@ def run_compas(data_path, output_csv_name, output_model_results, num_clusters=2,
     merged['proportion'] = merged['count'] / merged['total']
     result = merged.loc[merged.groupby("ethnic_group")["proportion"].idxmax()]
     cluster_groups = result.groupby("cluster")["ethnic_group"].apply(list)
-
-
 
     output_model_folder = os.path.join(repo_root, "model_results")
     os.makedirs(output_model_folder, exist_ok=True)
