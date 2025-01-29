@@ -1,0 +1,4 @@
+Ethnic Group - Cluster Mapping Based on Highest Proportion:
+==================================================
+
+Cluster 2: = [African-Am, African-American, Arabic, Asian, Caucasian, Hispanic, Native American, Oriental, Other]

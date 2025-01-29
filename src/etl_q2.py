@@ -39,9 +39,7 @@ from sklearn.metrics import (
     accuracy_score
 )
 
-from tensorflow.keras.preprocessing import image
 from tensorflow.keras.applications.resnet50 import ResNet50, preprocess_input
-from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import GlobalAveragePooling2D
 import os
 import pandas as pd
@@ -50,7 +48,6 @@ from keras.models import load_model
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers, regularizers
-from tensorflow.keras.models import Sequential, Model
 from tensorflow.keras.layers import (
     Input, Dense, Conv2D, Flatten, 
     MaxPooling2D, BatchNormalization, Dropout
@@ -65,7 +62,6 @@ from tensorflow.keras.callbacks import (
 
 from tensorflow.keras.regularizers import Regularizer
 
-from folktables import ACSDataSource, ACSIncome, ACSEmployment, ACSPublicCoverage
 from sklearn.preprocessing import LabelEncoder
 from tensorflow.keras.models import Sequential, Model
 from keras.models import load_model
@@ -78,7 +74,6 @@ import random
 from sklearn.metrics import pairwise_distances
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.preprocessing import StandardScaler
-from sklearn.preprocessing import MinMaxScaler
 
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -190,6 +185,10 @@ def load_compas_data_pcategorizing(data_path):
     features = df[~df["ScoreText_", "Ethnic_Code_Raw"]]
 
     # adding a column that indicates what type
+    #label shape changed  -- ADDED THIS 
+    labels = labels.reshape(-1, 1)
+
+
     
     return features, labels, ethn_from_df
  
