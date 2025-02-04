@@ -1,0 +1,6 @@
+{
+    "data_url":"https://raw.githubusercontent.com/propublica/compas-analysis/master/compas-scores-two-years.csv", 
+    "dataset_name":"compas", 
+    "lambda_adv":1.0,
+    "output_dir":"model_results"
+}

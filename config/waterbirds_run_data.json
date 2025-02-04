@@ -1,9 +1,0 @@
-{
-    "output_csv_name":"wb_p_y_pl_df.csv", 
-    "output_model_results": "wb_result_acc.txt",
-    "num_clusters":"2", 
-    "num_epochs":20, 
-    "model_path":"best_wb_model_inc.h5", 
-    "num_var_reg":0, 
-    "seed_num":0
-}

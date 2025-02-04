@@ -1,7 +1,0 @@
-State - Cluster Mapping Based on Highest Proportion:
-==================================================
-
-Cluster 0: = [AK, AL, AR, AZ, CO, CT, DE, FL, GA, IA, ID, IL, IN, KS]
-Cluster 1: = [NC, ND, NH, NJ, NM, NY, OH, OK, OR, PA, RI, SC, SD, TN, TX, UT, VA, VT, WA, WI, WV, WY]
-Cluster 2: = [CA, HI, NV, PR]
-Cluster 3: = [KY, LA, MA, MD, ME, MI, MN, MO, MS, MT]

@@ -1,20 +1,14 @@
-from ucimlrepo import fetch_ucirepo 
-
 import pandas as pd 
 import numpy as np
-import matplotlib.pyplot as plt
+import tensorflow as tf
 import seaborn as sns
-from sklearn.preprocessing import StandardScaler, LabelEncoder 
-from sklearn.mixture import GaussianMixture 
-from sklearn.cluster import KMeans
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score, classification_report
-from sklearn.decomposition import PCA
-from sklearn.metrics import silhouette_score
-from sklearn.preprocessing import MinMaxScaler
+import os
+import random
+import datetime
 
-from sklearn.datasets import fetch_openml
-import seaborn as sns
+import matplotlib.pyplot as plt
+from sklearn.preprocessing import StandardScaler, LabelEncoder 
+from sklearn.model_selection import train_test_split
 
 from tensorflow.keras.layers import (
     Input, Dense, Conv2D, Flatten, 
@@ -33,29 +27,21 @@ from tensorflow.keras.constraints import Constraint
 from tensorflow.keras.optimizers import Adam
 from keras.initializers import Constant
 
-from tensorflow.keras.datasets import mnist
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import (
-    confusion_matrix,
-    roc_auc_score,
-    accuracy_score
-)
+from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import roc_auc_score, accuracy_score
 
-from tensorflow.keras.preprocessing import image
 from tensorflow.keras.applications.resnet50 import ResNet50, preprocess_input
-from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import GlobalAveragePooling2D
-import os
-import pandas as pd
 from tqdm import tqdm
 from keras.models import load_model
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers, regularizers
-from tensorflow.keras.models import Sequential, Model
 from tensorflow.keras.layers import (
     Input, Dense, Conv2D, Flatten, 
-    MaxPooling2D, BatchNormalization, Dropout
+    MaxPooling2D, BatchNormalization, Dropout, Concatenate
 )
 
 from tensorflow.keras.utils import to_categorical
@@ -64,754 +50,480 @@ from tensorflow.keras.callbacks import (
     ModelCheckpoint,
     LearningRateScheduler
 )
-from tensorflow.keras.initializers import RandomUniform
-from tensorflow.keras.regularizers import l1, l2
-from tensorflow.keras.constraints import Constraint
-from tensorflow.keras.optimizers import Adam
-from keras.initializers import Constant
-
-from tensorflow.keras.datasets import mnist
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import (
-    confusion_matrix,
-    roc_auc_score,
-    accuracy_score
-)
 
 from tensorflow.keras.regularizers import Regularizer
-
-from tensorflow.keras.regularizers import Regularizer 
-from folktables import ACSDataSource, ACSIncome, ACSEmployment, ACSPublicCoverage
-from sklearn.preprocessing import LabelEncoder
 from tensorflow.keras.models import Sequential, Model
 from keras.models import load_model
 from tensorflow.keras.layers import Dense, Dropout
-from tensorflow.keras.optimizers import Adam
-from tensorflow.keras.constraints import Constraint
-from tensorflow.keras.regularizers import Regularizer
 from tensorflow.keras.callbacks import LearningRateScheduler, ModelCheckpoint
 from tensorflow.keras.utils import to_categorical
-from tensorflow.keras.initializers import RandomUniform
-import tensorflow as tf
-import random
 
 from sklearn.metrics import pairwise_distances
-from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.preprocessing import StandardScaler
-from sklearn.preprocessing import MinMaxScaler
-
-import matplotlib.pyplot as plt
-import seaborn as sns
-
-from PIL import Image
-import os
-import tarfile
+import tensorflow as tf
 
 # This will be used when saving the files
 repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
+# -------------------------------
+# Custom Gradient Reversal Layer
+# -------------------------------
+@tf.custom_gradient
+def grad_reverse(x, lambda_):
+    def grad(dy):
+        return -lambda_ * dy, None # reverses direction of gradient 
+    return x, grad
 
-def retrieve_covid_data(covid_fp, replace_num, test_data=False): 
+# custom Keras layer
+"""
+Layer is used to ensure that the feature representation are independent of a sensitive attribute
+- feature extract learns normally in the forward pass
+- reversing gradients of classifier that tries to predict the sensitive attribute during backpropagation -- stops feature extractor from encoding sensitive information
+"""
+class GradientReversalLayer(tf.keras.layers.Layer): 
+    def __init__(self, lambda_=1.0, **kwargs):
+        super(GradientReversalLayer, self).__init__(**kwargs)
+        self.lambda_ = lambda_ # strength of gradient reversal
+    def call(self, x):
+        return grad_reverse(x, self.lambda_)
+
+# -------------------------------
+# Data Loading and Preprocessing
+# -------------------------------
+def set_seed(seed_num):
+    random.seed(seed_num)
+    np.random.seed(seed_num)
+    tf.random.set_seed(seed_num)
+    os.environ['PYTHONHASHSEED'] = str(seed_num)
+
+# -------------------------------
+# Adversarial Debiasing Model
+# -------------------------------
+def build_adversarial_model(input_dim, lambda_adv=1.0):
     """
-    This function is used to retrieve the covid dataset
+    Build an adversarial debiasing model that learns pseudo‑labels Y' from X.
+
+    Architecture:
+      - Main branch (encoder): from X, several dense layers produce a latent pseudo‑label pseudo_Y (via sigmoid).
+      - Adversary branch: pseudo_Y is passed through a Gradient Reversal Layer and then dense layers predict S.
+      - Decoder branch: concatenates pseudo_Y and the one-hot sensitive attribute S to predict the observed label Y.
+
+    Losses:
+      - For the main branch, binary crossentropy between observed Y and pseudo_Y (and Y_pred).
+      - For the adversary branch, categorical crossentropy to predict S.
+
+    Returns a compiled Keras model that takes inputs X and S (one-hot encoded) and outputs:
+      [pseudo_Y, S_pred, Y_pred].
     """
-    if test_data == False:
-        covid = pd.read_csv(covid_fp)
-        # Cleaning up column names
-        covid.columns = covid.columns.str.strip().str.lower()
-    
-        # Creating boolean column which is what will be predicted
-        covid["died_bool"] = covid["date_died"] != "9999-99-99"
-    
-        # Replacing all 98 values with 97 so there is only one number that indicates whether
-        # the value is missing
-        covid.replace(replace_num, 97, inplace=True)
-        
-        covid.drop(columns=["clasiffication_final", "date_died"], inplace=True)
-        
-        return covid 
-    else: 
-        test = pd.read_csv(covid_fp)
-        # Cleaning up column names
-        test.columns = test.columns.str.strip().str.lower()
-        return test
+    X_input = tf.keras.Input(shape=(input_dim,), name="X")
+    S_input = tf.keras.Input(shape=(2,), name="S")  # one-hot encoded S
 
-### GMM
-def gmm_adults(gmm_adult_ts): 
+    # Main branch: Encoder for pseudo-label.
     """
-    This function prints out a classification report for the Gaussian Mixture Model that
-    is used to identify 2 clusters to predict whether someone will have an income greater than 
-    or less than 50,000
     """
-    # Retrieving data for model 
-    X,y = retrieve_adult_data()
-    X = pd.get_dummies(X, drop_first=True)
-    
-    # standardizing features 
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X)
+    h = Dense(64, activation='relu')(X_input)
+    h = BatchNormalization()(h)
+    h = Dense(32, activation='relu')(h)
+    h = BatchNormalization()(h)
+    pseudo_Y = Dense(1, activation='sigmoid', name="pseudo_Y")(h) ## outputs  probability value for pseudo_Y between 0,1
 
-    X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size = gmm_adult_ts)
-
-    gmm = GaussianMixture(n_components = 2)
-
-    gmm.fit(X_train)
-
-    y_pred = gmm.predict(X_test)
-
-    mapped_y_pred = [0 if label == y_test.mode()[0] else 1 for label in y_pred]
-    
-    output_model_folder = os.path.join(repo_root, "gmm_kmeans_results")
-    os.makedirs(output_model_folder, exist_ok=True)
-    output_txt_path = os.path.join(output_model_folder, "gmm_adults_results.txt")
-    with open(output_txt_path, "w") as file:
-        # Proportions for each cluster
-        file.write(f"Accuracy: {accuracy_score(y_test, y_pred)}\n")
-        file.write(f"Classification Report: {classification_report(y_test, y_pred)}\n")
-
-def gmm_covid(covid_fp, replace_num, gmm_covid_ts,test_data=False): 
+    # Adversary branch: from pseudo_Y, with GRL.
     """
-    This function outputs a classification report for the the Gaussian Mixture model for 
-    covid dataset - am only looking at it's ability to identify 2 groups. 
+    This is to prevent psuedo_Y from containing information about S
+    - adversary will try to predict S from pseudo_Y (fair label)...if it can accurately predict S, then Y' still encodes information about S (don't want this) 
+    - use the gradient reversal layer to prevent this from happening
     """
-    covid = retrieve_covid_data(covid_fp, replace_num)
+    grl = GradientReversalLayer(lambda_=lambda_adv)(pseudo_Y)
+    a = Dense(32, activation='relu')(grl)
+    a = BatchNormalization()(a)
+    S_pred = Dense(2, activation='softmax', name="S_pred")(a)
 
-    class_0 = covid[covid["died_bool"] == False]
-    class_1 = covid[covid["died_bool"] == True]
-    class_1_count = class_1.shape[0]
-
-    class_0_under = class_0.sample(class_1_count)
-
-    # Equal numbers of died and not died in this datasets
-    covid_under = pd.concat([class_0_under, class_1], axis=0)
-
-    # Separate the target variable
-    y = covid_under["died_bool"]
-    X = covid_under.drop(columns=["died_bool"])
-
-    # Convert categorical variables to dummy/indicator variables
-    X = pd.get_dummies(X, drop_first=True)
-
-    le = LabelEncoder()
-    y = le.fit_transform(y)
-
-    # Standardize features
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X)
-
-    # Stratified train-test split to maintain class balance
-    X_train, X_test, y_train, y_test = train_test_split(
-        X_scaled, y, test_size=gmm_covid_ts, random_state=42
-    )
-
-    # Fit the Gaussian Mixture Model
-    gmm = GaussianMixture(n_components=2)
-    gmm.fit(X_train)
-
-    # Predict on test data
-    y_pred = gmm.predict(X_test)
-
-    # Map predictions to 0 or 1 based on the most common label in y_test
-    mapped_y_pred = [0 if label == y_test[0] else 1 for label in y_pred]
-
-    output_model_folder = os.path.join(repo_root, "gmm_kmeans_results")
-    os.makedirs(output_model_folder, exist_ok=True)
-    output_txt_path = os.path.join(output_model_folder, "gmm_covid_results.txt")
-    with open(output_txt_path, "w") as file:
-        # Proportions for each cluster
-        file.write(f"Accuracy: {accuracy_score(y_test, mapped_y_pred)}\n")
-        file.write(f"Classification Report: {classification_report(y_test, mapped_y_pred)}\n")
-    
-    return X_scaled, y, gmm
-
-def plot_pca_gmm_covid(covid_fp, replace_num, gmm_covid_ts, test_data=False):
+    # Decoder branch: combine pseudo_Y and S to predict observed Y.
     """
-    This function is used to plot compare the two group that the GMM identifies 
-    to the 2 original groups.
+    Y depepends on both Y' and S 
+    -- predict the final observed label Y using both psuedo_Y and S
+    -- Y may still depend on S, that is why it's being used here 
+    -- decoder ensures Y_final is accurate, while psuedo_Y is not directly influenced by S 
+    -- psuedo_Y removes unfair dependencies on S...however S might still contain legit info needed to predict Y accurately 
+    -- IMPORTANT - THIS STEP ALLOWS FAIR DEPENDENCIES WHILE ELIMINATING UNFAIR ONES
+    -- structure how S influences Y, without letting hidden biases leak through 
     """
-    
-    X_scaled, y, gmm = gmm_covid(covid_fp, replace_num, gmm_covid_ts)
-    # Perform PCA to reduce the dataset to 2D
-    pca = PCA(n_components=2)
-    X_pca = pca.fit_transform(X_scaled)
+    concat = Concatenate()([pseudo_Y, S_input])
+    d = Dense(16, activation='relu')(concat)
+    d = BatchNormalization()(d)
+    Y_pred = Dense(1, activation='sigmoid', name="Y_pred")(d)
 
-    # Predict clusters using GMM
-    y_cluster = gmm.predict(X_scaled)
+    model = tf.keras.Model(inputs=[X_input, S_input],
+                           outputs=[pseudo_Y, S_pred, Y_pred])
+    model.compile(optimizer=tf.keras.optimizers.Adam(1e-4),
+                  loss={"pseudo_Y": "binary_crossentropy",
+                        "S_pred": "categorical_crossentropy",
+                        "Y_pred": "binary_crossentropy"},
+                  loss_weights={"pseudo_Y": 1.0, "S_pred": lambda_adv, "Y_pred": 1.0},
+                  metrics={"pseudo_Y": "accuracy",
+                           "S_pred": "accuracy",
+                           "Y_pred": "accuracy"}) # Y_pred is the best estimate of Y accounting for fair dependencies 
+    return model
 
-    # Create a DataFrame with PCA results, GMM clusters, and original class labels
-    pca_df = pd.DataFrame(data=X_pca, columns=['PCA1', 'PCA2'])
-    pca_df['GMM Cluster'] = y_cluster
-    pca_df['Original Class'] = y # Assuming `y_sample` is the original target label
-
-    # Plot side-by-side comparison of GMM clusters and original classes
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 8))
-
-    # Plot GMM Clusters
-    sns.scatterplot(x='PCA1', y='PCA2', hue='GMM Cluster', data=pca_df, palette='Set1', ax=ax1, alpha=0.7)
-    ax1.set_title('GMM Clusters')
-    ax1.set_xlabel('PCA Component 1')
-    ax1.set_ylabel('PCA Component 2')
-    ax1.legend(title='GMM Cluster')
-
-    # Plot Original Classes
-    sns.scatterplot(x='PCA1', y='PCA2', hue='Original Class', data=pca_df, palette='Set2', ax=ax2, alpha=0.7)
-    ax2.set_title('Original Classes')
-    ax2.set_xlabel('PCA Component 1')
-    ax2.set_ylabel('PCA Component 2')
-    ax2.legend(title='Original Class')
-
-    plt.tight_layout()
-    # Save the plot as a PNG file
-    output_folder = os.path.join(repo_root, "gmm_kmeans_results")
-    os.makedirs(output_folder, exist_ok=True)
-
-    output_file_path = os.path.join(output_folder, "gmm_covid_pca")
-
-    plt.savefig(output_file_path, dpi=300)
-
-def kmeans_adults(): 
-    X, y = retrieve_adult_data()
-    data = pd.concat([X, y], axis=1)
-    
-    # Encode categorical features
-    categorical_cols = data.select_dtypes(include=['object']).columns
-    data[categorical_cols] = data[categorical_cols].apply(LabelEncoder().fit_transform)
-    
-    # Standardize numerical features
-    scaler = StandardScaler()
-    numeric_cols = data.select_dtypes(include=['int64', 'float64']).columns
-    data[numeric_cols] = scaler.fit_transform(data[numeric_cols])
-    
-    # Apply k-means clustering
-    k = 5
-    kmeans = KMeans(n_clusters=k, random_state=0)
-    data['cluster'] = kmeans.fit_predict(data[numeric_cols])
-    
-    # Calculate silhouette score
-    score = silhouette_score(data[numeric_cols], data['cluster'])
-    print(f'Silhouette Score for {k} clusters: {score}')
-    
-    # Dimensionality reduction for visualization
-    pca = PCA(n_components=2)
-    X_reduced = pca.fit_transform(data[numeric_cols])  # Use only numeric features
-    
-    # Plot the clusters
-    plt.figure(figsize=(10, 6))
-    sns.scatterplot(x=X_reduced[:, 0], y=X_reduced[:, 1], hue=data['cluster'], palette='viridis', s=50)
-
-    # Save the plot as a PNG file
-    output_folder = "gmm_kmeans_results"
-    os.makedirs(output_folder, exist_ok=True)
-    output_file_path = os.path.join(output_folder, "kmeans_adults.png")
-    plt.savefig(output_file_path, dpi=300)
-
-def retrieve_adult_data():
+# -------------------------------
+# Manual Fairness Metrics
+# -------------------------------
+def compute_fairness_metrics_manual(y_true, y_pred, sensitive_features):
     """
-    This function is used to retrieve UCI's adult dataset
+    Compute fairness metrics manually.
+    y_true: binary ground-truth labels (1-D numpy array).
+    y_pred: continuous scores (will be thresholded at 0.5).
+    sensitive_features: 1-D numpy array (0 or 1).
+
+    Returns a dictionary with:
+      - Demographic parity difference (absolute difference in positive rates).
+      - Equalized odds difference (average difference in TPR and FPR).
+      - Selection rates per group.
+      - Group-wise accuracy.
     """
-    # Fetch dataset 
-    adult = fetch_openml(name='adult', version=2, as_frame=True)
+    y_pred_bin = (y_pred > 0.5).astype(int) # y_pred is continuous value, so converting it to binary 
+    groups = np.unique(sensitive_features)
 
-    # Data (as pandas dataframes) 
-    X = adult.data
-    y = adult.target
-    
-    # Cleaning target values
-    y.replace("<=50K.", "<=50K", inplace=True)
-    y.replace(">50K.", ">50K", inplace=True)
-    
-    # Group the original dataset for how it was 
-    full_data = pd.concat([X, y], axis=1)
-
-    # Breaking up the groups so we can do undersampling for the "greater than" group
-    less_than = full_data[full_data["class"] == "<=50K"]
-    greater_than = full_data[full_data["class"] == ">50K"]
-
-    # Conducting undersampling here 
-    greater_than_count = greater_than.shape[0]
-    less_than_under = less_than.sample(greater_than_count)
-
-    under_sampled_data = pd.concat([greater_than, less_than_under], axis=0)
-    under_sampled_data["lower_income_bool"] = under_sampled_data["class"] == "<=50K"
-
-    y = under_sampled_data["lower_income_bool"]
-    X = under_sampled_data.drop(columns=["class", "lower_income_bool"])
-    
-    return X, y
-
-
-
-# Image Pre-Processing 
-# ===========================
-# Feature Extraction
-# ===========================
-def create_feature_extractor():
+    # Demographic parity 
     """
-    Model that extracts features from images using a pre-trained ResNet50
+    All groups (from sensitive feature) should receive positive predictions at the same rate
+    P(Y_hat = 1|S=0) = P(Y_hat=1|S=1)
     """
-    base_model = ResNet50(weights='imagenet', include_top=False)
-    extractor = Sequential([
-        base_model,
-        GlobalAveragePooling2D()
-    ])
-    return extractor
 
-def process_images_in_batches(dataset_path, metadata_df, batch_size=32):
+    # For each group in the sensitive feature, find the demographic parity and compute the difference (based on the formula in above comment)
+    pos_rates = {}
+    for g in groups: 
+        pos_rates[g] = np.mean(y_pred_bin[sensitive_features == g])
+    dp_diff = abs(pos_rates[0] - pos_rates[1]) ## this line assumes that there are only 2 groups, 0 and 1 -- if there are more than 2 groups, this would need to be changed
+    ## in all the examples used, there were only 2 groups -- need to double check this when working on new data
+    
+    # dp_diff > 0, then demographic parity isn't fair 
+
+    # Equalized odds
     """
-    Process images in batches to extract features while minimizing memory usage
+    Ensuring the different groups in the sensitive feature similar TPR and FPR rates -- this is so that the model isn't discriminating in error types
     """
-    extractor = create_feature_extractor()
-    total_images = len(metadata_df)
-    features = np.zeros((total_images, 2048)) # Resizing images to 224x224 pixels to match 
-    # ResNet50's input size
-    
-    for i in tqdm(range(0, total_images, batch_size)):
-        batch_files = metadata_df['img_filename'].iloc[i:i+batch_size]
-        batch_images = []
-        
-        for img_path in batch_files:
-            img = image.load_img(os.path.join(dataset_path, img_path), 
-                               target_size=(224, 224))
-            img_array = image.img_to_array(img)
-            img_array = np.expand_dims(img_array, axis=0)
-            batch_images.append(img_array)
-        
-        batch_images = np.vstack(batch_images)
-        batch_images = preprocess_input(batch_images)
-        
-        batch_features = extractor.predict(batch_images, verbose=0)
-        features[i:i+len(batch_files)] = batch_features
-        
-        del batch_images
-        del batch_features
-    
-    return features # a 2D numpy array where each row represents the extracted features for an image
-    
+    metrics = {}
+    for g in groups:
+        mask = (sensitive_features == g)
+        y_true_g = y_true[mask]
+        y_pred_g = y_pred_bin[mask]
+        tpr = np.sum((y_pred_g == 1) & (y_true_g == 1)) / (np.sum(y_true_g == 1) + 1e-8) # True Positive Rate
+        fpr = np.sum((y_pred_g == 1) & (y_true_g == 0)) / (np.sum(y_true_g == 0) + 1e-8) # False Positive Rate
+        metrics[g] = (tpr, fpr)
+    eo_diff = (abs(metrics[0][0] - metrics[1][0]) + abs(metrics[0][1] - metrics[1][1])) # taking average of two error types
 
-# Census Pre-Processing
-
-def load_census_data(data_processor, seed_num=0):
+    # Selection rate per group.
     """
-    Load and process census data.
-    @param data_processor: ACSIncome, ACSEmployment, ACSPublicCoverage 
+    proportion of samples predicted as positive for each group -- a a group has a higher selection rate, the model may favor that group unfairly
     """
-    set_seed(seed_num)
+    sel_rate = {}
+    for g in groups:
+        sel_rate[g] = pos_rates[g]
 
-    states = ['AK','AL','AR','AZ','CA','CO','CT','DC','DE','FL','GA','HI','IA','ID','IL','IN','KS','KY','LA',
-        'MA','MD','ME','MI','MN','MO','MS','MT','NC','ND','NH','NJ','NM','NY','NV','OH','OK','OR','PA','PR',
-        'RI','SC','SD','TN','TX','UT','VA','VT','WA','WI','WV','WY']
-    
-    data_source = ACSDataSource(survey_year='2018', horizon='1-Year', survey='person')
-    all_data = pd.DataFrame()
-    state_row_counts = {}
-
-    for state in states: 
-        try:
-            state_data = data_source.get_data(states=[state], download=True)     
-            state_features, _, _ = data_processor.df_to_numpy(state_data)
-            state_features_df = pd.DataFrame(state_features)
-            state_features_df['ST'] = state
-            state_row_counts[state] = state_features_df.shape[0]
-            all_data = pd.concat([all_data, state_features_df], ignore_index=True)
-        except Exception as e: 
-            continue
-
-    ## GRAB ONLY CERTAIN AMOUNT FROM EACH STATE
-    ## FOR EACH STATE, APPLY MIN, MAX SCALER (both)
-    
-    min_row_count = min(state_row_counts.values())
-    # Sample the minimum number of rows for each state
-    balanced_data = pd.DataFrame()
-    for state in states:
-        state_data = all_data[all_data['ST'] == state]
-        if len(state_data) >= min_row_count:
-            sampled_data = state_data.sample(n=min_row_count)
-            balanced_data = pd.concat([balanced_data, sampled_data], ignore_index=True)
-
-    # Encode state labels
-    label_encoder = LabelEncoder()
-    states_from_df = balanced_data["ST"].to_numpy()
-    balanced_data['ST_encoded'] = label_encoder.fit_transform(balanced_data['ST'])
-    labels = balanced_data["ST_encoded"].to_numpy()
-    
-    features = balanced_data.drop(columns=["ST", "ST_encoded"]).to_numpy()
-    standard_scaler = StandardScaler()
-    features_standardized = standard_scaler.fit_transform(features)
-
-    minmax_scaler = MinMaxScaler()
-    features_scaled = minmax_scaler.fit_transform(features_standardized)
-
-    return features_scaled, labels, states_from_df
-
-# Clustering method - Parjanya's code 
-
-# ===========================
-# Helper Classes
-# ===========================
-class ClipConstraint(Constraint):
+    # Group-wise accuracy.
     """
-    Clips model weights to a given range [min_value, max_value].
-    Normalizes weights along a specific axis to exurethey sum to1
+    for each group in the sensitive feature, compute the accuracy of the model (to ensure that it's perfoming consistently across groups)
     """
-    def __init__(self, min_value, max_value):
-        self.min_value = min_value
-        self.max_value = max_value
+    group_acc = {}
+    for g in groups:
+        mask = (sensitive_features == g)
+        group_acc[g] = accuracy_score(y_true[mask], y_pred_bin[mask])
 
-    def __call__(self, weights):
-        w = tf.clip_by_value(weights, self.min_value, self.max_value)
-        return w / tf.reduce_sum(w, axis=1, keepdims=True)
-    def get_config(self):
-        return {'min_value': self.min_value, 'max_value': self.max_value}
+    return {
+        "demographic_parity_difference": dp_diff,
+        "equalized_odds_difference": eo_diff,
+        "selection_rate": sel_rate,
+        "group_accuracy": group_acc
+    }
 
-class VarianceRegularizer(Regularizer):
+
+# -------------------------------
+# Plotting Function
+# -------------------------------
+def plot_comparison(metrics_baseline, metrics_fair, plot_file_path):
     """
-    Custom regularizer for maximum weight variance.
-    Purpose: encourage uniformity among weights -- improve generalization or stability
+    parameters are dictionaries with the stored values of the evaluation metrics
     """
-    
-    def __init__(self, factor=0.01):
-        self.factor = factor
-    
-    def __call__(self, x):
-        variances = tf.math.reduce_variance(x, axis=1)
-        max_variance = tf.reduce_max(variances)
-        return self.factor * max_variance
-    
-    def get_config(self):
-        return {'factor': self.factor}
+    models = ['Baseline', 'Fair']
+    aucs = [metrics_baseline['auc'], metrics_fair['auc']]
+    accs = [metrics_baseline['accuracy'], metrics_fair['accuracy']]
+    dp_diff = [metrics_baseline["demographic_parity_difference"], metrics_fair["demographic_parity_difference"]]
+    eo_diff = [metrics_baseline["equalized_odds_difference"], metrics_fair["equalized_odds_difference"]]
 
-# ===========================
-# Model Definition and Training
-# ===========================
-def lr_schedule(epoch):
-    """Defines the learning rate schedule."""
-    if epoch < 20:
-        return 1e-4
+    # creating a 2x3 gird of bar chars comparing baseline model and fair model across: AUC, accuracy, demographic parity diff, equalized odd difference
+    fig, axs = plt.subplots(2, 2, figsize=(14, 10))
+
+    ## measures how well the model seperates postiive and negative classes, higher AUC = better model performance
+    # if fair model has a lower AUC than the baseline, can indicate a fairness-performance tradeoff (meaning less well seperation for more fair results)
+    axs[0,0].bar(models, aucs, color=['blue', 'green'])
+    axs[0,0].set_title('AUC')
+    axs[0,0].set_ylim([0, 1])
+
+    ## correct pred/total pred
+    ## fairness may lower accuracy 
+    axs[0,1].bar(models, accs, color=['blue', 'green'])
+    axs[0,1].set_title('Accuracy')
+    axs[0,1].set_ylim([0, 1])
+
+    ## orange = baseline, purple = fairness -LOOK INTO TO SEE HOW TO KNOW WHICH GROUP IS CONTRIBUTING TO HIGHER DP
+    # lower values of dp indciate better fairness
+    axs[1,0].bar(models, dp_diff, color=['orange', 'purple'])
+    axs[1,0].set_title('Demographic Parity Difference')
+
+    ## lower value - better fairness
+    ## equalized odds is satisfied if tpr and fpr are equal across the different groups in the sensitive feature
+    axs[1,1].bar(models, eo_diff, color=['orange', 'purple'])
+    axs[1,1].set_title('Equalized Odds Difference')
+
+    plt.suptitle("Comparison: Baseline (X → Y) vs. Fair (X → Y') Model")
+    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+    plt.savefig(plot_file_path)
+    plt.close()
+
+# -------------------------------
+# Main Function: Comparison and Visualization
+# -------------------------------
+def main_binary(data_url, dataset_name, lambda_adv=1.0, output_dir='model_results'):
+    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+
+    # creating folder for output results
+    output_path = os.path.join(repo_root, output_dir)
+    os.makedirs(output_path, exist_ok=True)
+    
+    log_file_path = os.path.join(output_path, f'{dataset_name}_results_log.txt')
+    plot_file_path = os.path.join(output_path, f'{dataset_name}_comparison_plot.png')
+
+    def log(message):
+        with open(log_file_path, 'a') as f: 
+            f.write(message + '\n')
+    
+    open(log_file_path, 'w').close() # deleting previous log if it exist s
+
+    set_seed(42)
+                     
+    if dataset_name == "compas": 
+        X, Y_obs, S = load_and_preprocess_compas_data_binary(data_url) ##  S is binary
+
+    elif dataset_name == "german":
+        X, Y_obs, S = load_and_preprocess_german_data(data_url) ##  S is binary
+
+
+    elif dataset_name == "adult":
+        X, Y_obs, S = load_and_preprocess_adult_data(data_url) ##  S is binary
+
     else:
-        return 1e-5
-
-def get_model_z(X,s,n_z,model_name,epochs=20,verbose=1,var_reg=0.0):
-    """
-    Defines and trains a clustering model. 
-    """
-    #Shuffle X and s together
-    indices = np.arange(X.shape[0])
-    np.random.shuffle(indices)
+        log("Invalid dataset_name")
+        return 
     
-    lr_scheduler = LearningRateScheduler(lr_schedule, verbose=1) # added this in here isntead
-    
-    X = X[indices]
-    s = s[indices]
-    model = Sequential([
-        Dense(1024, activation='relu', input_shape=(X.shape[1],)),
-        Dropout(0.5),
-        Dense(128, activation='relu'),
-        Dropout(0.5),
-        Dense(128, activation='relu'),
-        Dense(64, activation='relu'),
-        Dense(s.shape[1], activation='linear'),
-        Dense(n_z, activation='softmax', name='target_layer'),
-        Dense(s.shape[1], activation='linear', use_bias=False,kernel_initializer=RandomUniform(minval=0, maxval=1),kernel_constraint=ClipConstraint(0, 1), kernel_regularizer=VarianceRegularizer(factor=var_reg)), 
-    ])
-    optimizer = Adam(learning_rate=1e-3) # an adaptive learning rate optimizer
-    model.compile(optimizer=optimizer, loss='categorical_crossentropy', metrics=['accuracy'])
-    model_checkpoint_path = os.path.join(repo_root, model_name)
 
-    model_checkpoint_callback = ModelCheckpoint(
-        filepath=model_checkpoint_path,
-        save_best_only=True,
-        monitor='val_loss',
-        mode='min',
-        verbose=verbose
+    log(f"Loading and preprocessing {dataset_name} data...")
+    X_train, X_test, Y_train_obs, Y_test_obs, S_train, S_test = train_test_split(
+        X, Y_obs, S, test_size=0.2, random_state=42
     )
-    
-    model.fit(
-        X,
-        s,
-        batch_size=1024,
-        epochs=epochs,
-        validation_split=0.1,
-        callbacks=[model_checkpoint_callback, lr_scheduler]    
-    )
-    
-    best_model = load_model(model_checkpoint_path, custom_objects={'ClipConstraint': ClipConstraint,'VarianceRegularizer': VarianceRegularizer})
-    return best_model
 
-def pzx(X,best_model,arg_max=True):
-    """
-    Predict cluster assignments
-    """
-    softmax_output_model = Model(inputs=best_model.input, outputs=best_model.layers[-2].output)
-    p = softmax_output_model.predict(X)
-    if(arg_max):
-        p = np.argmax(p,axis=1)
-    return p
-
-def set_seed(seed_num): 
-    # Set random seed for reproducibility
-    seed = seed_num
-    random.seed(seed)
-    np.random.seed(seed)
-    tf.random.set_seed(seed)
-
-def visualization_images(file_paths, p, y, p_value, y_value, dataset_path):
-    """
-    Visualizes a 2x2 grid of images based on specified filtering conditions.
-    """
-    selected_indices = np.random.choice(len(file_paths[(p==p_value)&(np.squeeze(y)==y_value)]), 4, replace=False)
-    selected_file_paths = file_paths[(p==p_value)&(np.squeeze(y)==y_value)][selected_indices]
-    
-    fig, axes = plt.subplots(2, 2, figsize=(10, 10))
-    
-    for ax, file_path in zip(axes.flatten(), selected_file_paths):
-        file = os.path.join(dataset_path, file_path)
-        img = Image.open(file)
-        ax.imshow(img)
-        ax.axis('off')  
-    
-    plt.tight_layout()
-
-    # Save the plot as a PNG file
-    output_folder = os.path.join(repo_root, "waterbirds_image_results")
-    os.makedirs(output_folder, exist_ok=True)
-
-    output_file_path = os.path.join(output_folder, f"{p_value}_{y_value}.png")
-
-    plt.savefig(output_file_path, dpi=300)
-    
-def download_wb_data(tar_file_path): 
-    tar_file_path = os.path.join(repo_root, tar_file_path)
-    extract_path = os.path.join(repo_root, "waterbirds_data")
-    # Create the extraction directory if it doesn't exist
-    os.makedirs(extract_path, exist_ok=True)
-
-    # Open and extract the .tar.gz file
-    with tarfile.open(tar_file_path, 'r:gz') as tar:
-        tar.extractall(path=extract_path)
-        print(f"Extracted contents to: {extract_path}")
+    if dataset_name == "compas":
+        log(f"Features shape: {X.shape}")
+        log(f"Observed Label Y shape: {Y_obs.shape}   (Recidivism: 1=recid, 0=non-recid)")
+        log(f"Sensitive Attribute (Race, binarized) shape: {S.shape}")
         
-def retrieve_wb_features(): 
-    # Know this path cause this is where images were saved from download_waterbirds_data function
-    dataset_path = os.path.join(repo_root, "waterbirds_data/waterbird_complete95_forest2water2")
-    metadata_file = os.path.join(dataset_path, 'metadata.csv')
-    metadata_df = pd.read_csv(metadata_file)
-
-    features = process_images_in_batches(dataset_path, metadata_df)
-
-    output_folder = os.path.join(repo_root, "waterbirds_features")
-    os.makedirs(output_folder, exist_ok=True)
-
-    output_file_path = os.path.join(output_folder, "features.npy")
-    
-    np.save(output_file_path, features)
-# ===========================
-# Waterbirds Run
-# ===========================
-def run_waterbirds(output_csv_name, output_model_results, num_clusters=2, num_epochs=60, model_path='best_wb_model_inc.h5', num_var_reg=0, seed_num=0): 
-    set_seed(seed_num)
-
-    dataset_path = dataset_path = os.path.join(repo_root, "waterbirds_data/waterbird_complete95_forest2water2")
-    features_path = os.path.join(repo_root, "waterbirds_features/features.npy")
-    metadata_file = os.path.join(dataset_path, 'metadata.csv')
-    metadata_df = pd.read_csv(metadata_file)
-    y = metadata_df['y']
-
-    s = metadata_df['split'].values 
-    s=(s+1)//2
-
-    features = np.load(features_path)
-    file_paths = metadata_df['img_filename'].values
-
-    # Make s1 as one hot of s
-    s1 = to_categorical(s)
+    elif dataset_name == "german": 
+        log(f"Features shape: {X.shape}")
+        log(f"Observed Label Y shape: {Y_obs.shape}   (Credit risk: 1=good, 0=bad)")
+        log(f"Sensitive Attribute (Age, binarized) shape: {S.shape}")
         
-    best_model = get_model_z(features, s1, num_clusters, model_path, epochs=num_epochs, var_reg=num_var_reg)
-    
-    # for function pzx - want to save these each to a column 
-    p1_fl = pzx(features, best_model, arg_max=False)
-    p1_tr = pzx(features, best_model, arg_max=True)
+    elif dataset_name == "adult":
+        log(f"Features shape: {X.shape}")
+        log(f"Observed Label Y shape: {Y_obs.shape}   (Label from 'income')")
+        log(f"Sensitive Attribute (Sex) shape: {S.shape}")
 
-    file_paths = metadata_df['img_filename'].values
-    
-    y = metadata_df['y']
-    place = metadata_df['place'] # check if y and place match and output into a txt file
+    input_dim = X_train.shape[1]
 
-    p1_fl_df = pd.DataFrame(
-        p1_fl,
-        columns=['p1_fl_cluster_0', 'p1_fl_cluster_1']
-    )
+    # One-hot encode S for adversarial model training.
+    S_train_oh = tf.keras.utils.to_categorical(S_train, num_classes=2)
+    S_test_oh  = tf.keras.utils.to_categorical(S_test, num_classes=2)
 
-    p1_tr_df = pd.DataFrame(
-        p1_tr,
-        columns=['cluster']
-    )
+    ### 1. Train adversarial debiasing model (X → Y' with adversary)
+    log("\nTraining adversarial model (X → Y' with adversary) ...")
+    adv_model = build_adversarial_model(input_dim, lambda_adv=lambda_adv)
+    # For training, we use the observed Y as target for both pseudo_Y and Y_pred.
+    # Reshape Y_obs to (-1,1) since our outputs are scalars.
+    Y_train_obs_exp = Y_train_obs.reshape(-1, 1)
+    Y_test_obs_exp  = Y_test_obs.reshape(-1, 1)
+    adv_model.fit([X_train, S_train_oh],
+                  {"pseudo_Y": Y_train_obs_exp, "S_pred": S_train_oh, "Y_pred": Y_train_obs_exp},
+                  epochs=30, batch_size=128, verbose=1)
 
-    # Combine everything into a DataFrame
-    p_y_place_df = pd.concat(
-        [p1_fl_df, p1_tr_df,
-            pd.DataFrame({
-                "y": y,
-                "place": place
-            })
-        ],
-        axis=1
-    )
+    # Get pseudo-label predictions.
+    pseudo_Y_train, _, _ = adv_model.predict([X_train, S_train_oh]) ## do we want psuedo_Y or Y_pred? psuedo_Y is for complete fairness why pred_Y can be a bit more accurate by keep necessary dependencies
+    pseudo_Y_test,  _, _ = adv_model.predict([X_test, S_test_oh])
 
-    # Save the DataFrame to a CSV file
-    output_folder = os.path.join(repo_root, "wb_retrieved_data")
-    os.makedirs(output_folder, exist_ok=True)
-    output_csv_path = os.path.join(output_folder, output_csv_name)
-    p_y_place_df.to_csv(output_csv_path, index=False)
+    # Threshold pseudo-labels to get binary labels.
+    pseudo_Y_train_bin = (pseudo_Y_train > 0.5).astype(np.float32)
+    pseudo_Y_test_bin  = (pseudo_Y_test > 0.5).astype(np.float32)
 
+    log("\nPseudo-label statistics (training):")
+    for g in np.unique(S_train):
+        mask = (S_train == g)
+        log(f"Group {g} pseudo-positive rate: {np.mean(pseudo_Y_train_bin[mask]):.4f}") # average probability of a postive prediction per group -- fairness check to see if both groups receive similar treatment
 
-    ## EVALUATION OF MODEL OUTPUT
+    ### 2. Train baseline logistic regression model on observed Y (X → Y) -- regular logistic regression for baseline for comparison; does not include any fairness constraints
+    log("\nTraining baseline logistic regression classifier (X → Y)...")
+    baseline_clf = LogisticRegression(solver='lbfgs', max_iter=1000)
+    baseline_clf.fit(X_train, Y_train_obs)
+    baseline_preds = baseline_clf.predict_proba(X_test)[:, 1]
+    baseline_auc = roc_auc_score(Y_test_obs, baseline_preds)
+    baseline_acc = accuracy_score(Y_test_obs, (baseline_preds > 0.5).astype(int))
+    baseline_fairness = compute_fairness_metrics_manual(Y_test_obs, baseline_preds, sensitive_features=S_test)
 
-    # Creating a new column where the condition y == place is checked
-    p_y_place_df['y_equals_place'] = p_y_place_df['y'] == p_y_place_df['place']
-    
-    # Group by 'cluster' and calculate the proportion
-    proportions = (
-        p_y_place_df.groupby('cluster')['y_equals_place']
-        .mean()  # Mean of True/False (1/0) gives the proportion
-        .reset_index(name='proportion_y_equals_place')
-    )
+    ### 3. Train fair logistic regression model on pseudo-labels (X → Y') -- using psuedo_Y from the the adv_model, 
+    log("\nTraining fair logistic regression classifier (X → Y') using pseudo-labels...")
+    fair_clf = LogisticRegression(solver='lbfgs', max_iter=1000)
+    fair_clf.fit(X_train, pseudo_Y_train_bin.ravel())
+    fair_preds = fair_clf.predict_proba(X_test)[:, 1]
+    fair_auc = roc_auc_score(Y_test_obs, fair_preds)
+    fair_acc = accuracy_score(Y_test_obs, (fair_preds > 0.5).astype(int))
+    fair_fairness = compute_fairness_metrics_manual(Y_test_obs, fair_preds, sensitive_features=S_test)
 
-    output_model_folder = os.path.join(repo_root, "model_results")
-    os.makedirs(output_model_folder, exist_ok=True)
-    output_txt_path = os.path.join(output_model_folder, output_model_results)
-    with open(output_txt_path, "w") as file:
-        # Proportions for each cluster
-        file.write("Proportion Accuracy Where Y=Place:\n")
-        for _, row in proportions.iterrows():
-            file.write(f"Cluster {row['cluster']}: {row['proportion_y_equals_place']:.4f}\n")
+    # Aggregate metrics for plotting.
+    metrics_baseline = {
+        "auc": baseline_auc,
+        "accuracy": baseline_acc,
+        "demographic_parity_difference": baseline_fairness["demographic_parity_difference"],
+        "equalized_odds_difference": baseline_fairness["equalized_odds_difference"]
+    }
+    metrics_fair = {
+        "auc": fair_auc,
+        "accuracy": fair_acc,
+        "demographic_parity_difference": fair_fairness["demographic_parity_difference"],
+        "equalized_odds_difference": fair_fairness["equalized_odds_difference"]
+    }
 
+    log("\nBaseline Logistic Regression (X → Y) Evaluation:")
+    log(f"AUC: {baseline_auc:.4f}, Accuracy: {baseline_acc:.4f}")
+    log(f"Fairness metrics: {baseline_fairness}")
 
-    # Doing all the combination to see what it should be
-    visualization_images(file_paths, p1_tr, y, 1, 0, dataset_path)
-    visualization_images(file_paths, p1_tr, y,1, 1, dataset_path)
-    visualization_images(file_paths, p1_tr, y, 0, 1, dataset_path)
-    visualization_images(file_paths, p1_tr, y, 0, 0, dataset_path)
+    log("\nFair Logistic Regression (X → Y') Evaluation (compared to observed Y):")
+    log(f"AUC: {fair_auc:.4f}, Accuracy: {fair_acc:.4f}")
+    log(f"Fairness metrics: {fair_fairness}")
 
-# ===========================
-# Census Data Set
-# ===========================
-
-def run_census(data_processor_type, output_csv_name, output_model_results, num_clusters=4, num_epochs=60, model_path='best_census_model_inc.h5', num_var_reg=0, seed_num=0):
-    
-    set_seed(seed_num)
-
-    if data_processor_type == "income": 
-        data_processor = ACSIncome
-
-    elif data_processor_type == "employment": 
-        data_processor = ACSEmployment
-
-    elif data_processor_type == "public_coverage": 
-        data_processor =  ACSPublicCoverage
-
-    else: 
-        raise ValueError(f"Invalid data_processor_type '{data_processor_type}'. Must be one of: 'income', 'employment', or 'public_coverage'.")
-
-    
-    features, labels, states_from_df = load_census_data(data_processor)
-    s1 = to_categorical(labels)
-    best_model = get_model_z(features, s1, 4, model_path, epochs=40, var_reg=0)
-
-    p1_tr = pzx(features, best_model, arg_max=True)
-
-    
-    cluster_state_df = pd.DataFrame({
-        "cluster":p1_tr,
-        "states":states_from_df, 
-        "type": data_processor_type
-        }
-        )
-
-    # Save the DataFrame to a CSV file
-    output_folder = os.path.join(repo_root, "census_retrieved_data")
-    os.makedirs(output_folder, exist_ok=True)
-    output_csv_path = os.path.join(output_folder, output_csv_name)
-    cluster_state_df.to_csv(output_csv_path, index=False)
-
-    # Group by 'states' and 'cluster', then count the occurrences of each cluster for each state
-    cluster_counts = cluster_state_df.groupby(["states", "cluster"]).size().reset_index(name='count')
-    
-    # Calculate the total count for each state
-    state_totals = cluster_state_df.groupby("states")["cluster"].count().reset_index(name='total')
-    
-    # Merge the counts with the total counts per state
-    merged = pd.merge(cluster_counts, state_totals, on="states")
-    
-    # Calculate the proportion for each cluster within each state
-    merged['proportion'] = merged['count'] / merged['total']
-    result = merged.loc[merged.groupby("states")["proportion"].idxmax()]
-    cluster_groups = result.groupby("cluster")["states"].apply(list)
+    # Plot comparison.
+    plot_comparison(metrics_baseline, metrics_fair, plot_file_path)
 
 
+### UCI ADULTS
 
-    output_model_folder = os.path.join(repo_root, "model_results")
-    os.makedirs(output_model_folder, exist_ok=True)
-    output_txt_path = os.path.join(output_model_folder, output_model_results)
-    with open(output_txt_path, "w") as file:
-        file.write("State - Cluster Mapping Based on Highest Proportion:\n")
-        file.write("=" * 50 + "\n\n")
-        for cluster, states in cluster_groups.items():
-            state_list = ", ".join(states)
-            file.write(f"Cluster {cluster}: = [{state_list}]\n")
-
-
-def run_census_cosine(census_data_csv_path, cosine_census_path_name): 
+def load_and_preprocess_adult_data(data_url):
     """
-    census_data_csv_path : should be the one after run_census - will be in the census_retrieved_data folder
-    output_cosine_census_results_path : just the name of the jaccard plot - should be .png and indicate data processor
+    Download and preprocess the UCI Adult dataset.
+
+    Features (X): use only:
+       'age', 'education-num', 'marital-status', 'occupation', 'hours-per-week'
+    Observed Label (Y): derived from 'income' (binary: 1 if '>50K', 0 otherwise)
+    Sensitive attribute (S): derived from 'sex' (binary: 1 if 'Male', 0 if 'Female')
+
+    Returns:
+      X: numpy array of shape (n_samples, 5)
+      Y: 1-D numpy array of observed labels.
+      S: 1-D numpy array of sensitive attribute.
     """
-    census_data = pd.read_csv(census_data_csv_path) 
-    
-    # Rename column if necessary
-    census_data = census_data.rename(columns={"p1_tr": "cluster"})
-    
-    # Create a binary matrix for states and clusters
-    state_cluster_matrix = pd.crosstab(census_data['states'], census_data['cluster'])
-    
-    # Convert to a numpy array to calculate distances
-    state_cluster_matrix_array = state_cluster_matrix.values
-    
-    # Calculate the pairwise Cosine similarity between states
-    cosine_sim_matrix = cosine_similarity(state_cluster_matrix_array)
-    
-    # Convert the result to a DataFrame for better readability
-    cosine_sim_df = pd.DataFrame(cosine_sim_matrix, index=state_cluster_matrix.index, columns=state_cluster_matrix.index)
-    
-    # Plot the cosine similarity matrix as a heatmap
-    plt.figure(figsize=(15, 8))
-    sns.heatmap(cosine_sim_df, annot=False, cmap="Blues", cbar=True, xticklabels=True, yticklabels=True)
-    plt.title('State Similarity Based on Clusters (Cosine Similarity)')
-    
-    # Save the plot as a PNG file
-    output_folder = os.path.join(repo_root, "census_image_results")
-    os.makedirs(output_folder, exist_ok=True)
-    output_file = os.path.join(output_folder, cosine_census_path_name)
-    plt.savefig(output_file)
+    col_names = ["age", "workclass", "fnlwgt", "education", "education-num",
+                 "marital-status", "occupation", "relationship", "race", "sex",
+                 "capital-gain", "capital-loss", "hours-per-week", "native-country", "income"]
+    data = pd.read_csv(data_url, header=None, names=col_names, na_values=" ?", skipinitialspace=True)
+    data.dropna(inplace=True)
 
-        
+    # Features
+    feature_cols = ["age", "education-num", "marital-status", "occupation", "hours-per-week"]
+    X = data[feature_cols].copy()
+    for col in X.columns:
+        if X[col].dtype == object:
+            X[col] = pd.Categorical(X[col]).codes
+    scaler = StandardScaler()
+    X = scaler.fit_transform(X.values.astype(np.float32))
 
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
+    # Observed label
+    data['income'] = data['income'].apply(lambda s: s.replace('.', '').strip())
+    y_binary = (data['income'] == '>50K').astype(np.int32)
+    Y = y_binary.values  # 1-D array
+
+    # Sensitive attribute
+    S = (data['sex'].str.strip() == 'Male').astype(np.int32).values  # 1-D array
+
+    return X, Y, S
+
+### GERMAN 
+def load_and_preprocess_german_data(data_url):
+    """
+    Download and preprocess the German Credit dataset.
+
+    We assume the dataset has 21 columns.
+
+    Features (X): Use only:
+        "duration", "credit_amount", "inst_rate"
+    Observed Label (Y): from "target". In many versions, target is coded as 1 for good and 2 for bad.
+        We recode: good (1) -> 1, bad (2) -> 0.
+    Protected Attribute (S): Use the "age" column.
+        We binarize age by computing the median and setting S = 1 if age >= median (older), else 0.
+    """
+    col_names = ["chk_status", "duration", "credit_history", "purpose", "credit_amount",
+                 "savings", "employment", "inst_rate", "personal_status_sex", "other_debtors",
+                 "residence_since", "property", "age", "other_installment_plans", "housing",
+                 "num_credits", "job", "num_dependents", "telephone", "foreign_worker", "target"]
+    data = pd.read_csv(data_url, header=None, names=col_names, sep=' ', engine='python')
+
+    # Features: use only duration, credit_amount, and inst_rate.
+    feature_cols = ["duration", "credit_amount", "inst_rate"]
+    X = data[feature_cols].copy().astype(np.float32)
+    scaler = StandardScaler()
+    X = scaler.fit_transform(X.values)
+
+    # Observed label: target. Recode so that 1 -> 1 (good) and 2 -> 0 (bad)
+    Y = data["target"].values
+    Y = np.where(Y == 1, 1, 0)
+
+    # Protected attribute: use age.
+    # Convert age to float and then binarize by the median.
+    age_vals = data["age"].astype(np.float32).values
+    median_age = np.median(age_vals)
+    S = (age_vals >= median_age).astype(np.int32)
+
+    return X, Y, S
+
+### COMPAS 
+def load_and_preprocess_compas_data_binary(data_url):
+    """
+    Download and preprocess the COMPAS dataset.
+
+    We assume the dataset contains, among others, the following columns:
+      - 'age'
+      - 'race'
+      - 'priors_count'
+      - 'juv_fel_count'
+      - 'juv_misd_count'
+      - 'juv_other_count'
+      - 'two_year_recid'
+
+    Features (X): We select a few numerical features.
+    Observed Label (Y): Use 'two_year_recid' as a binary label (0/1).
+    Protected Attribute (S): Use 'race'. Here we binarize race so that:
+         African‑American  → 1
+         all other races  → 0.
+    """
+    data = pd.read_csv(data_url)
+    # Drop rows with missing values in the selected columns.
+    data = data.dropna(subset=["age", "race", "priors_count", "juv_fel_count", "juv_misd_count", "juv_other_count", "two_year_recid"])
+
+    # Observed label: two_year_recid (already 0/1)
+    Y = data["two_year_recid"].values
+
+    # Sensitive attribute: race. We set S=1 if race is African-American, else 0.
+    S = (data["race"] == "African-American").astype(int).values
+
+    # Features: use a subset of numerical features.
+    feature_cols = ["age", "priors_count", "juv_fel_count", "juv_misd_count", "juv_other_count"]
+    X = data[feature_cols].copy().astype(np.float32)
+    scaler = StandardScaler()
+    X = scaler.fit_transform(X.values)
+
+    return X, Y, S
