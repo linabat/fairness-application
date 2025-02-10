@@ -1,9 +1,6 @@
 # Fairness Exploration: Latent Feature Discover
 
-This quarter's work focused on exploring clustering methods for latent variables. We began by examining common clustering methods, such as **K-Means Clustering** and **Gaussian Mixture Models**, applied to the UCI Adult dataset and Kaggle's COVID-19 dataset. Building on this, we implemented a more complex **neural network-based model** to cluster the data and identify latent (unknown) variables. This algorithm was applied to four datasets: three tabular datasets and one image dataset.
-
-**Note:** These datasets are quite large, and running them efficiently will likely require a GPU.
-
+This quarter we are focusing on the discovery of fair latent variables using an encoder-decoder model. This model will be used on on tabular datasets that have features, X, an identifiable sensitive feature, S, and observed labels, Y. We will see how this algorithm performs on common fairness datasets as well as 2 new datasets that we are further exploring with. 
 ## Getting Started
 
 To achieve the same results as we did, follow these steps:
