@@ -355,12 +355,16 @@ def main_binary(data_url, dataset_name, lambda_adv=1.0, output_dir='model_result
                   epochs=30, batch_size=128, verbose=1)
 
     # Get pseudo-label predictions.
-    pseudo_Y_train, _, _ = adv_model.predict([X_train, S_train_oh]) ## do we want psuedo_Y or Y_pred? psuedo_Y is for complete fairness why pred_Y can be a bit more accurate by keep necessary dependencies
-    pseudo_Y_test,  _, _ = adv_model.predict([X_test, S_test_oh])
+    pseudo_Y_train, S_pred, Y_pred_train = adv_model.predict([X_train, S_train_oh]) ## do we want psuedo_Y or Y_pred? psuedo_Y is for complete fairness why pred_Y can be a bit more accurate by keep necessary dependencies
+    pseudo_Y_test,  S_test, Y_pred_test = adv_model.predict([X_test, S_test_oh])
 
     # Threshold pseudo-labels to get binary labels.
-    pseudo_Y_train_bin = (pseudo_Y_train > 0.5).astype(np.float32)
-    pseudo_Y_test_bin  = (pseudo_Y_test > 0.5).astype(np.float32)
+    # pseudo_Y_train_bin = (pseudo_Y_train > 0.5).astype(np.float32)
+    # pseudo_Y_test_bin  = (pseudo_Y_test > 0.5).astype(np.float32)
+
+    # USING Y - PRED
+    pseudo_Y_train_bin = (Y_pred_train > 0.5).astype(np.float32)
+    pseudo_Y_test_bin  = (Y_pred_test > 0.5).astype(np.float32)
 
     log("\nPseudo-label statistics (training):")
     for g in np.unique(S_train):
