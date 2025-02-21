@@ -6,7 +6,7 @@ Sensitive Attribute (Sex) shape: (32561,)
 Training adversarial model (X → Y' with adversary) ...
 
 Pseudo-label statistics (training):
-Group 0 pseudo-positive rate: 0.0546
-Group 1 pseudo-positive rate: 0.2516
+Group 0 pseudo-positive rate: 0.0730
+Group 1 pseudo-positive rate: 0.2276
 
 Training baseline logistic regression classifier (X → Y)...

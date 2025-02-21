@@ -237,11 +237,10 @@ def compute_fairness_metrics_manual(y_true, y_pred, sensitive_features):
         "group_accuracy": group_acc
     }
 
-
 # -------------------------------
 # Plotting Function
 # -------------------------------
-def plot_comparison(metrics_baseline, metrics_fair, plot_file_path):
+def plot_comparison(metrics_baseline, metrics_fair):
     """
     parameters are dictionaries with the stored values of the evaluation metrics
     """
@@ -278,8 +277,7 @@ def plot_comparison(metrics_baseline, metrics_fair, plot_file_path):
 
     plt.suptitle("Comparison: Baseline (X → Y) vs. Fair (X → Y') Model")
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-    plt.savefig(plot_file_path)
-    plt.close()
+    plt.show()
 
 # -------------------------------
 # Main Function: Comparison and Visualization
@@ -339,12 +337,12 @@ def main_binary(data_url, dataset_name, lambda_adv=1.0, output_dir='model_result
 
     input_dim = X_train.shape[1]
 
-    # One-hot encode S for adversarial model training.
+      # One-hot encode S for adversarial model training.
     S_train_oh = tf.keras.utils.to_categorical(S_train, num_classes=2)
     S_test_oh  = tf.keras.utils.to_categorical(S_test, num_classes=2)
 
     ### 1. Train adversarial debiasing model (X → Y' with adversary)
-    log("\nTraining adversarial model (X → Y' with adversary) ...")
+    print("\nTraining adversarial model (X → Y' with adversary) ...")
     adv_model = build_adversarial_model(input_dim, lambda_adv=lambda_adv)
     # For training, we use the observed Y as target for both pseudo_Y and Y_pred.
     # Reshape Y_obs to (-1,1) since our outputs are scalars.
@@ -356,20 +354,23 @@ def main_binary(data_url, dataset_name, lambda_adv=1.0, output_dir='model_result
 
     # Get pseudo-label predictions.
     pseudo_Y_train, S_pred, Y_pred_train = adv_model.predict([X_train, S_train_oh]) ## do we want psuedo_Y or Y_pred? psuedo_Y is for complete fairness why pred_Y can be a bit more accurate by keep necessary dependencies
-    pseudo_Y_test,  S_test, Y_pred_test = adv_model.predict([X_test, S_test_oh])
+    pseudo_Y_test,  S_pred, Y_pred_test = adv_model.predict([X_test, S_test_oh])
 
     # Threshold pseudo-labels to get binary labels.
-    # pseudo_Y_train_bin = (pseudo_Y_train > 0.5).astype(np.float32)
-    # pseudo_Y_test_bin  = (pseudo_Y_test > 0.5).astype(np.float32)
+    # THIS IS WITH PSUEDO_Y -- assuming that there is complete independence bewteen S and Y -- USE THIS!!
+    Y_pred_train_bin = (pseudo_Y_train > 0.5).astype(np.float32)
+    Y_pred_test_bin  = (pseudo_Y_test > 0.5).astype(np.float32)
 
-    # USING Y - PRED
-    pseudo_Y_train_bin = (Y_pred_train > 0.5).astype(np.float32)
-    pseudo_Y_test_bin  = (Y_pred_test > 0.5).astype(np.float32)
+    # # USING Y - PRED
+    # pseudo_Y_train_bin = (Y_pred_train > 0.5).astype(np.float32)
+    # pseudo_Y_test_bin  = (Y_pred_test > 0.5).astype(np.float32)
 
     log("\nPseudo-label statistics (training):")
     for g in np.unique(S_train):
         mask = (S_train == g)
-        log(f"Group {g} pseudo-positive rate: {np.mean(pseudo_Y_train_bin[mask]):.4f}") # average probability of a postive prediction per group -- fairness check to see if both groups receive similar treatment
+        print(f"Group {g} pseudo-positive rate: {np.mean(Y_pred_train_bin[mask]):.4f}") # average probability of a postive prediction per group -- fairness check to see if both groups receive similar treatment
+ 
+        # average probability of a postive prediction per group -- fairness check to see if both groups receive similar treatment
 
     ### 2. Train baseline logistic regression model on observed Y (X → Y) -- regular logistic regression for baseline for comparison; does not include any fairness constraints
     log("\nTraining baseline logistic regression classifier (X → Y)...")
@@ -379,11 +380,11 @@ def main_binary(data_url, dataset_name, lambda_adv=1.0, output_dir='model_result
     baseline_auc = roc_auc_score(Y_test_obs, baseline_preds)
     baseline_acc = accuracy_score(Y_test_obs, (baseline_preds > 0.5).astype(int))
     baseline_fairness = compute_fairness_metrics_manual(Y_test_obs, baseline_preds, sensitive_features=S_test)
-
+    
     ### 3. Train fair logistic regression model on pseudo-labels (X → Y') -- using psuedo_Y from the the adv_model, 
     log("\nTraining fair logistic regression classifier (X → Y') using pseudo-labels...")
     fair_clf = LogisticRegression(solver='lbfgs', max_iter=1000)
-    fair_clf.fit(X_train, pseudo_Y_train_bin.ravel())
+    fair_clf.fit(X_train, Y_pred_train_bin.ravel())
     fair_preds = fair_clf.predict_proba(X_test)[:, 1]
     fair_auc = roc_auc_score(Y_test_obs, fair_preds)
     fair_acc = accuracy_score(Y_test_obs, (fair_preds > 0.5).astype(int))
@@ -403,16 +404,16 @@ def main_binary(data_url, dataset_name, lambda_adv=1.0, output_dir='model_result
         "equalized_odds_difference": fair_fairness["equalized_odds_difference"]
     }
 
-    log("\nBaseline Logistic Regression (X → Y) Evaluation:")
-    log(f"AUC: {baseline_auc:.4f}, Accuracy: {baseline_acc:.4f}")
-    log(f"Fairness metrics: {baseline_fairness}")
+    print("\nBaseline Logistic Regression (X → Y) Evaluation:")
+    print(f"AUC: {baseline_auc:.4f}, Accuracy: {baseline_acc:.4f}")
+    print("Fairness metrics:", baseline_fairness)
 
-    log("\nFair Logistic Regression (X → Y') Evaluation (compared to observed Y):")
-    log(f"AUC: {fair_auc:.4f}, Accuracy: {fair_acc:.4f}")
-    log(f"Fairness metrics: {fair_fairness}")
+    print("\nFair Logistic Regression (X → Y') Evaluation (compared to observed Y):")
+    print(f"AUC: {fair_auc:.4f}, Accuracy: {fair_acc:.4f}")
+    print("Fairness metrics:", fair_fairness)
 
     # Plot comparison.
-    plot_comparison(metrics_baseline, metrics_fair, plot_file_path)
+    plot_comparison(metrics_baseline, metrics_fair)
 
 
 ### UCI ADULTS
@@ -531,3 +532,7 @@ def load_and_preprocess_compas_data_binary(data_url):
     X = scaler.fit_transform(X.values)
 
     return X, Y, S
+
+"""
+Binary Synthetic Data Exploration
+"""
