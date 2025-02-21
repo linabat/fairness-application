@@ -101,3 +101,75 @@ Fairness metrics: {'demographic_parity_difference': 0.2998496240601503, 'equaliz
 Fair Logistic Regression (X → Y') Evaluation (compared to observed Y):
 AUC: 0.9860, Accuracy: 0.9340
 Fairness metrics: {'demographic_parity_difference': 0.11949874686716794, 'equalized_odds_difference': 0.21948399048203582, 'selection_rate': {0: 0.41523809523809524, 1: 0.5347368421052632}, 'group_accuracy': {0: 0.9333333333333333, 1: 0.9347368421052632}}
+
+Training adversarial model (X → Y' with adversary) ...
+
+Pseudo-label statistics (training):
+Group 0 pseudo-positive rate: 0.4673
+Group 1 pseudo-positive rate: 0.5284
+
+Training baseline [BIASED] logistic regression classifier (X → Y)...
+
+Training fair logistic regression classifier (X → Y') using pseudo-labels...
+
+Baseline Logistic Regression (X → Y) Evaluation:
+AUC: 0.9450, Accuracy: 0.8470
+Fairness metrics: {'demographic_parity_difference': 0.2998496240601503, 'equalized_odds_difference': 0.5809983620242689, 'selection_rate': {0: 0.3485714285714286, 1: 0.6484210526315789}, 'group_accuracy': {0: 0.8666666666666667, 1: 0.8252631578947368}}
+
+Fair Logistic Regression (X → Y') Evaluation (compared to observed Y):
+AUC: 0.9860, Accuracy: 0.9340
+Fairness metrics: {'demographic_parity_difference': 0.11949874686716794, 'equalized_odds_difference': 0.21948399048203582, 'selection_rate': {0: 0.41523809523809524, 1: 0.5347368421052632}, 'group_accuracy': {0: 0.9333333333333333, 1: 0.9347368421052632}}
+
+Training adversarial model (X → Y' with adversary) ...
+
+Pseudo-label statistics (training):
+Group 0 pseudo-positive rate: 0.4673
+Group 1 pseudo-positive rate: 0.5284
+
+Training baseline [BIASED] logistic regression classifier (X → Y)...
+
+Training fair logistic regression classifier (X → Y') using pseudo-labels...
+
+Baseline Logistic Regression (X → Y) Evaluation:
+AUC: 0.9450, Accuracy: 0.8470
+Fairness metrics: {'demographic_parity_difference': 0.2998496240601503, 'equalized_odds_difference': 0.5809983620242689, 'selection_rate': {0: 0.3485714285714286, 1: 0.6484210526315789}, 'group_accuracy': {0: 0.8666666666666667, 1: 0.8252631578947368}}
+
+Fair Logistic Regression (X → Y') Evaluation (compared to observed Y):
+AUC: 0.9860, Accuracy: 0.9340
+Fairness metrics: {'demographic_parity_difference': 0.11949874686716794, 'equalized_odds_difference': 0.21948399048203582, 'selection_rate': {0: 0.41523809523809524, 1: 0.5347368421052632}, 'group_accuracy': {0: 0.9333333333333333, 1: 0.9347368421052632}}
+
+Training adversarial model (X → Y' with adversary) ...
+
+Pseudo-label statistics (training):
+Group 0 pseudo-positive rate: 0.4673
+Group 1 pseudo-positive rate: 0.5284
+
+Training baseline [BIASED] logistic regression classifier (X → Y)...
+
+Training fair logistic regression classifier (X → Y') using pseudo-labels...
+
+Baseline Logistic Regression (X → Y) Evaluation:
+AUC: 0.9450, Accuracy: 0.8470
+Fairness metrics: {'demographic_parity_difference': 0.2998496240601503, 'equalized_odds_difference': 0.5809983620242689, 'selection_rate': {0: 0.3485714285714286, 1: 0.6484210526315789}, 'group_accuracy': {0: 0.8666666666666667, 1: 0.8252631578947368}}
+
+Fair Logistic Regression (X → Y') Evaluation (compared to observed Y):
+AUC: 0.9860, Accuracy: 0.9340
+Fairness metrics: {'demographic_parity_difference': 0.11949874686716794, 'equalized_odds_difference': 0.21948399048203582, 'selection_rate': {0: 0.41523809523809524, 1: 0.5347368421052632}, 'group_accuracy': {0: 0.9333333333333333, 1: 0.9347368421052632}}
+
+Training adversarial model (X → Y' with adversary) ...
+
+Pseudo-label statistics (training):
+Group 0 pseudo-positive rate: 0.4673
+Group 1 pseudo-positive rate: 0.5284
+
+Training baseline [BIASED] logistic regression classifier (X → Y)...
+
+Training fair logistic regression classifier (X → Y') using pseudo-labels...
+
+Baseline Logistic Regression (X → Y) Evaluation:
+AUC: 0.9450, Accuracy: 0.8470
+Fairness metrics: {'demographic_parity_difference': 0.2998496240601503, 'equalized_odds_difference': 0.5809983620242689, 'selection_rate': {0: 0.3485714285714286, 1: 0.6484210526315789}, 'group_accuracy': {0: 0.8666666666666667, 1: 0.8252631578947368}}
+
+Fair Logistic Regression (X → Y') Evaluation (compared to observed Y):
+AUC: 0.9860, Accuracy: 0.9340
+Fairness metrics: {'demographic_parity_difference': 0.11949874686716794, 'equalized_odds_difference': 0.21948399048203582, 'selection_rate': {0: 0.41523809523809524, 1: 0.5347368421052632}, 'group_accuracy': {0: 0.9333333333333333, 1: 0.9347368421052632}}

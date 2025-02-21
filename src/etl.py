@@ -242,9 +242,12 @@ def compute_fairness_metrics_manual(y_true, y_pred, sensitive_features):
 # -------------------------------
 # Plotting Function
 # -------------------------------
+import pandas as pd
+import matplotlib.pyplot as plt
+
 def plot_comparison(metrics_baseline, metrics_fair, plot_file_path):
     """
-    parameters are dictionaries with the stored values of the evaluation metrics
+    Generates a comparison plot and a table displaying numerical values of evaluation metrics.
     """
     models = ['Baseline', 'Fair']
     aucs = [metrics_baseline['auc'], metrics_fair['auc']]
@@ -252,34 +255,44 @@ def plot_comparison(metrics_baseline, metrics_fair, plot_file_path):
     dp_diff = [metrics_baseline["demographic_parity_difference"], metrics_fair["demographic_parity_difference"]]
     eo_diff = [metrics_baseline["equalized_odds_difference"], metrics_fair["equalized_odds_difference"]]
 
-    # creating a 2x3 gird of bar chars comparing baseline model and fair model across: AUC, accuracy, demographic parity diff, equalized odd difference
+    # Creating a 2x2 grid of bar charts comparing metrics
     fig, axs = plt.subplots(2, 2, figsize=(14, 10))
 
-    ## measures how well the model seperates postiive and negative classes, higher AUC = better model performance
-    # if fair model has a lower AUC than the baseline, can indicate a fairness-performance tradeoff (meaning less well seperation for more fair results)
-    axs[0,0].bar(models, aucs, color=['blue', 'green'])
-    axs[0,0].set_title('AUC')
-    axs[0,0].set_ylim([0, 1])
+    axs[0, 0].bar(models, aucs, color=['blue', 'green'])
+    axs[0, 0].set_title('AUC')
+    axs[0, 0].set_ylim([0, 1])
 
-    ## correct pred/total pred
-    ## fairness may lower accuracy 
-    axs[0,1].bar(models, accs, color=['blue', 'green'])
-    axs[0,1].set_title('Accuracy')
-    axs[0,1].set_ylim([0, 1])
+    axs[0, 1].bar(models, accs, color=['blue', 'green'])
+    axs[0, 1].set_title('Accuracy')
+    axs[0, 1].set_ylim([0, 1])
 
-    ## orange = baseline, purple = fairness -LOOK INTO TO SEE HOW TO KNOW WHICH GROUP IS CONTRIBUTING TO HIGHER DP
-    # lower values of dp indciate better fairness
-    axs[1,0].bar(models, dp_diff, color=['orange', 'purple'])
-    axs[1,0].set_title('Demographic Parity Difference')
+    axs[1, 0].bar(models, dp_diff, color=['orange', 'purple'])
+    axs[1, 0].set_title('Demographic Parity Difference')
 
-    ## lower value - better fairness
-    ## equalized odds is satisfied if tpr and fpr are equal across the different groups in the sensitive feature
-    axs[1,1].bar(models, eo_diff, color=['orange', 'purple'])
-    axs[1,1].set_title('Equalized Odds Difference')
+    axs[1, 1].bar(models, eo_diff, color=['orange', 'purple'])
+    axs[1, 1].set_title('Equalized Odds Difference')
 
     plt.suptitle("Comparison: Baseline (X → Y) vs. Fair (X → Y') Model")
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-    plt.savefig(plot_file_path)
+
+    plt.suptitle("Comparison: Baseline (X → Y) vs. Fair (X → Y') Model")
+
+    # Creating a table of numerical values
+    metrics_table = pd.DataFrame({
+        "Metric": ["AUC", "Accuracy", "Demographic Parity Difference", "Equalized Odds Difference"],
+        "Baseline": [metrics_baseline['auc'], metrics_baseline['accuracy'], 
+                     metrics_baseline["demographic_parity_difference"], metrics_baseline["equalized_odds_difference"]],
+        "Fair": [metrics_fair['auc'], metrics_fair['accuracy'], 
+                 metrics_fair["demographic_parity_difference"], metrics_fair["equalized_odds_difference"]]
+    })
+
+    # Adding table below the plots
+    table_ax = fig.add_axes([0.1, -0.3, 0.8, 0.2])  # Position for the table (adjusted as needed)
+    table_ax.axis('off')  # Hide the axis
+
+    table_ax.table(cellText=metrics_table.values, colLabels=metrics_table.columns, cellLoc='center', loc='center')
+
+    plt.savefig(plot_file_path, bbox_inches="tight")
     plt.close()
 
 # -------------------------------
