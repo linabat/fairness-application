@@ -28,3 +28,8 @@ if __name__ == '__main__':
         with open("config/compas.json", "r") as file:
             config = json.load(file)
         main_binary(**config)
+
+    if 'synthetic_binary' in args: 
+        with open("config/synthetic_binary.json", "r") as file:
+            config = json.load(file)
+        main_synthetic(**config) ## need to add the synthetic config
