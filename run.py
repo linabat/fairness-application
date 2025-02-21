@@ -8,7 +8,8 @@ src_path = os.path.join(current_dir, "src")
 sys.path.append(src_path)
 
 from etl import (
-    main_binary
+    main_binary,
+    main_synthetic
 )
     
 if __name__ == '__main__':

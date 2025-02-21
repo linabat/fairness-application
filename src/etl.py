@@ -61,6 +61,8 @@ from tensorflow.keras.utils import to_categorical
 from sklearn.metrics import pairwise_distances
 from sklearn.preprocessing import StandardScaler
 import tensorflow as tf
+from PIL import Image, ImageDraw, ImageFont
+
 
 # This will be used when saving the files
 repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -283,7 +285,7 @@ def plot_comparison(metrics_baseline, metrics_fair, plot_file_path):
 # -------------------------------
 # Main Function: Comparison and Visualization
 # -------------------------------
-def main_binary(data_url, dataset_name, lambda_adv=1.0, lambda_adv=1.0, epochs=64, batch_size=128, output_dir='model_results'):
+def main_binary(data_url, dataset_name, lambda_adv=1.0, epochs=64, batch_size=128, output_dir='model_results'):
     repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
     # creating folder for output results
@@ -579,7 +581,7 @@ def inject_bias(bias_factor=0.4, seed=42):
 
 def run_biased_logistic(X_train, Y_train_biased_pred, X_test, Y_test_biased_pred, Y_train_raw, Y_test_raw, S_train, S_test): 
     clf = LogisticRegression(solver='lbfgs', max_iter=1000)
-    clf.fit(X_train, Y_train_biased_pred)
+    clf.fit(X_train, Y_train_biased_pred.ravel())
     preds = clf.predict_proba(X_test)[:, 1]
     auc = roc_auc_score(Y_test_raw, preds)
     acc = accuracy_score(Y_test_raw, (preds > 0.5).astype(int))
@@ -598,8 +600,35 @@ def run_unbiased_logistic():
 
     dp_diff = fairness["demographic_parity_difference"]
     eo_diff = fairness["equalized_odds_difference"]
+    
 
-    log (f"Baseline: AUC:{auc}, Accuracy:{acc}, Demographic Parity Difference:{dp_diff}, Equalized Odds Difference:{eo_diff}")
+    # log (f"Baseline: AUC:{auc}, Accuracy:{acc}, Demographic Parity Difference:{dp_diff}, Equalized Odds Difference:{eo_diff}")
+
+    return auc, acc, dp_diff, eo_diff
+
+
+def append_text_to_image(image_path, text):
+    """
+    Opens an existing image and appends the given text to the bottom.
+    """
+    img = Image.open(image_path)
+    width, height = img.size
+
+    # Create a new image with additional height for text
+    extra_height = 100  # Adjust if needed
+    new_img = Image.new("RGB", (width, height + extra_height), "white")
+    new_img.paste(img, (0, 0))  # Paste original image
+
+    # Add text below the figure
+    draw = ImageDraw.Draw(new_img)
+    font = ImageFont.load_default()
+
+    text_position = (10, height + 10)
+    draw.text(text_position, text, fill="black", font=font)
+
+    # Save modified image back to original path
+    new_img.save(image_path)
+    # log(f"Updated plot saved with appended results at: {image_path}")
 
 
 # -------------------------------
@@ -679,15 +708,23 @@ def main_synthetic(lambda_adv=1.0, epochs=64, batch_size=128, output_dir='model_
 
     log("\nBaseline Logistic Regression (X → Y) Evaluation:")
     log(f"AUC: {baseline_auc:.4f}, Accuracy: {baseline_acc:.4f}")
-    log("Fairness metrics:", baseline_fairness)
+    log(f"Fairness metrics: {baseline_fairness}")
 
     log("\nFair Logistic Regression (X → Y') Evaluation (compared to observed Y):")
     log(f"AUC: {fair_auc:.4f}, Accuracy: {fair_acc:.4f}")
-    log("Fairness metrics:", fair_fairness)
+    log(f"Fairness metrics: {fair_fairness}")
 
     # Plot comparison.
     plot_comparison(metrics_baseline, metrics_fair, plot_file_path)
-    # run_unbiased_logistic() - APPEND THIS TO PLOT PNG THAT IS OUTPUTTED 
+    auc, acc, dp_diff, eo_diff = run_unbiased_logistic() # APPEND THIS TO PLOT PNG THAT IS OUTPUTTED 
+    summary_text = summary_text = (
+        f"Baseline Model Metrics:\n"
+        f"AUC: {auc:.3f}\n"
+        f"Accuracy: {acc:.3f}\n"
+        f"Demographic Parity Diff: {metrics_baseline['demographic_parity_difference']:.3f}\n"
+        f"Equalized Odds Diff: {metrics_baseline['equalized_odds_difference']:.3f}"
+    )
+    append_text_to_image(plot_file_path, summary_text)
 
 
 
