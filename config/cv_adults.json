@@ -1,0 +1,5 @@
+{
+    "dataset_name":"adult", 
+    "data_url":"https://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.data",
+    "output_file":"cv_adults.txt"
+}

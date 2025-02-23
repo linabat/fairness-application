@@ -63,6 +63,10 @@ from sklearn.preprocessing import StandardScaler
 import tensorflow as tf
 from PIL import Image, ImageDraw, ImageFont
 
+#### Cross validation  
+from sklearn.model_selection import StratifiedKFold
+from itertools import product
+from sklearn.base import BaseEstimator, ClassifierMixin
 
 # This will be used when saving the files
 repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -550,7 +554,7 @@ def load_and_preprocess_compas_data_binary(data_url):
     return X, Y, S
 
 """
-Binary Synthetic Data Exploration
+BINARY SYNTHETIC DATA EXPLORATION
 """
 def generate_synthetic_data(n_samples=5000, n_features=30, bias_factor=0.3, noise_level=0.1, seed=42):
     np.random.seed(seed)
@@ -731,13 +735,243 @@ def main_synthetic(lambda_adv=1.0, epochs=64, batch_size=128, output_dir='model_
     plot_comparison(metrics_baseline, metrics_fair, plot_file_path)
     auc, acc, dp_diff, eo_diff = run_unbiased_logistic() # APPEND THIS TO PLOT PNG THAT IS OUTPUTTED 
     summary_text = summary_text = (
-        f"Baseline Model Metrics:\n"
+        f"Fair Unbiased Model Metrics:\n"
         f"AUC: {auc:.3f}\n"
         f"Accuracy: {acc:.3f}\n"
         f"Demographic Parity Diff: {metrics_baseline['demographic_parity_difference']:.3f}\n"
         f"Equalized Odds Diff: {metrics_baseline['equalized_odds_difference']:.3f}"
     )
     append_text_to_image(plot_file_path, summary_text)
+
+"""
+CROSS VALIDATION FOR REAL WORLD DATASETS
+"""
+def compute_fairness_metrics_cv(y_true, y_pred, sensitive_features):
+    """
+    Compute fairness metrics manually along with performance metrics.
+    
+    y_true: binary ground-truth labels (1-D numpy array).
+    y_pred: continuous scores (will be thresholded at 0.5).
+    sensitive_features: 1-D numpy array (0 or 1).
+
+    Returns:
+      - auc: ROC AUC score.
+      - acc: overall accuracy.
+      - fairness_metrics: a dictionary with:
+          - Demographic parity difference (absolute difference in positive rates).
+          - Equalized odds difference (average difference in TPR and FPR).
+          - Selection rates per group.
+          - Group-wise accuracy.
+    """
+    # Convert continuous predictions to binary
+    y_pred_bin = (y_pred > 0.5).astype(int)
+
+    # Compute performance metrics
+    try:
+        auc = roc_auc_score(y_true, y_pred)
+    except Exception as e:
+        auc = np.nan  # Handle cases where AUC can't be computed
+    acc = accuracy_score(y_true, y_pred_bin)
+
+    groups = np.unique(sensitive_features)
+
+    # Demographic parity: difference in positive prediction rates between groups
+    pos_rates = {}
+    for g in groups: 
+        pos_rates[g] = np.mean(y_pred_bin[sensitive_features == g])
+    dp_diff = abs(pos_rates[0] - pos_rates[1])
+    
+    # Equalized odds: differences in TPR and FPR between groups
+    metrics = {}
+    for g in groups:
+        mask = (sensitive_features == g)
+        y_true_g = y_true[mask]
+        y_pred_g = y_pred_bin[mask]
+        tpr = np.sum((y_pred_g == 1) & (y_true_g == 1)) / (np.sum(y_true_g == 1) + 1e-8)
+        fpr = np.sum((y_pred_g == 1) & (y_true_g == 0)) / (np.sum(y_true_g == 0) + 1e-8)
+        metrics[g] = (tpr, fpr)
+    # Average the differences in TPR and FPR between the two groups
+    eo_diff = (abs(metrics[0][0] - metrics[1][0]) + abs(metrics[0][1] - metrics[1][1])) / 2.0
+
+    # Selection rates per group (same as positive prediction rates)
+    sel_rate = pos_rates
+
+    # Group-wise accuracy
+    group_acc = {}
+    for g in groups:
+        mask = (sensitive_features == g)
+        group_acc[g] = accuracy_score(y_true[mask], y_pred_bin[mask])
+
+    fairness_metrics = {
+        "demographic_parity_difference": dp_diff,
+        "equalized_odds_difference": eo_diff,
+        "selection_rate": sel_rate,
+        "group_accuracy": group_acc
+    }
+    
+    return auc, acc, fairness_metrics
+
+class AdversarialModelWrapperFixed(BaseEstimator, ClassifierMixin):
+    """
+    Fixed Wrapper for Adversarial Model to work with Grid Search.
+    """
+
+    def __init__(self, lambda_adv=1.0, epochs=64, batch_size=128):
+        self.lambda_adv = lambda_adv
+        self.epochs = epochs
+        self.batch_size = batch_size
+        self.model = None
+
+    def fit(self, X, y, S):
+        """
+        Train the adversarial model. S is now passed dynamically per fold.
+        """
+        y = y.ravel()  # Convert to 1D array
+        input_dim = X.shape[1]
+        S_oh = tf.keras.utils.to_categorical(S, num_classes=2)
+
+        self.model = build_adversarial_model(input_dim, lambda_adv=self.lambda_adv)
+        self.model.fit(
+            [X, S_oh],
+            {"pseudo_Y": y, "S_pred": S_oh, "Y_pred": y},
+            epochs=self.epochs,
+            batch_size=self.batch_size,
+            verbose=0
+        )
+        return self
+
+    def predict(self, X, S):
+        """
+        Generate predictions from the trained model. S must match X per fold.
+        """
+        S_oh = tf.keras.utils.to_categorical(S, num_classes=2)
+        pseudo_Y, S_pred, Y_pred = self.model.predict([X, S_oh], verbose=0)
+        return (pseudo_Y > 0.5).astype(np.float32)
+
+    def score(self, X, y, S, return_metrics=False):
+        """
+        Compute the optimization score combining AUC, accuracy, and fairness metrics.
+        Here, predictions are generated using self.predict.
+        """
+        # Generate predictions on X using sensitive features S
+        y_pred = self.predict(X, S)
+        # Compute metrics using a (presumably) provided function
+        auc, acc, fairness_metrics = compute_fairness_metrics_cv(
+            y_true=y,
+            y_pred=y_pred,
+            sensitive_features=S
+        )
+        
+        demographic_parity_diff = abs(fairness_metrics["demographic_parity_difference"])
+        score = auc + acc - demographic_parity_diff
+    
+        if return_metrics:
+            return score, acc, auc, demographic_parity_diff
+        return score
+
+def cross_validation_data(dataset_name, data_url, output_file):
+    # Load synthetic dataset
+    set_seed(42)
+
+    if dataset_name == "compas": 
+        X, Y_obs, S = load_and_preprocess_compas_data_binary(data_url)  # S is binary
+    elif dataset_name == "german":
+        X, Y_obs, S = load_and_preprocess_german_data(data_url)  # S is binary
+    elif dataset_name == "adult":
+        X, Y_obs, S = load_and_preprocess_adult_data(data_url)  # S is binary
+    else:
+        with open(output_file, "w") as f:
+            f.write("Invalid dataset_name\n")
+        return
+
+    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+
+    output_path = os.path.join(repo_root, "cross_val_results")
+    os.makedirs(output_path, exist_ok=True)
+    
+    output_file_path = os.path.join(output_path, output_file)
+
+    with open(output_file_path, "w") as f:
+        f.write(f"Loading and preprocessing {dataset_name} data...\n")
+        
+        X_train, X_test, Y_train_obs, Y_test_obs, S_train, S_test = train_test_split(
+            X, Y_obs, S, test_size=0.2, random_state=42
+        )
+        Y_train_obs = Y_train_obs.ravel()
+
+        param_grid = {
+            "lambda_adv": [1.0, 3.0, 5.0, 7.0, 15.0],
+            "epochs": [32, 64, 128],
+            "batch_size": [64, 128, 256]
+        }
+
+        cv = StratifiedKFold(n_splits=3, shuffle=True, random_state=42)
+        results = []
+
+        # Loop over all combinations of hyperparameters
+        for lambda_adv, epochs, batch_size in product(param_grid["lambda_adv"],
+                                                      param_grid["epochs"],
+                                                      param_grid["batch_size"]):
+            f.write(f"\nTesting lambda_adv={lambda_adv}, epochs={epochs}, batch_size={batch_size}\n")
+            scores, accuracies, aucs, demographic_parity_diffs = [], [], [], []
+
+            for fold, (train_idx, val_idx) in enumerate(cv.split(X_train, Y_train_obs)):
+                # Split data for the fold
+                X_train_fold, X_val_fold = X_train[train_idx], X_train[val_idx]
+                Y_train_fold, Y_val_fold = Y_train_obs[train_idx], Y_train_obs[val_idx]
+                S_train_fold, S_val_fold = S_train[train_idx], S_train[val_idx]
+
+                # Train model
+                model = AdversarialModelWrapperFixed(lambda_adv=lambda_adv, epochs=epochs, batch_size=batch_size)
+                model.fit(X_train_fold, Y_train_fold, S=S_train_fold)
+
+                # Obtain predictions
+                Y_train_pred = model.predict(X_train_fold, S_train_fold)
+                Y_val_pred = model.predict(X_val_fold, S_val_fold)
+
+                # Evaluate model and get metrics
+                score, accuracy, auc, demographic_parity_diff = model.score(
+                    X_val_fold,
+                    Y_val_fold,
+                    S_val_fold,
+                    return_metrics=True
+                )
+
+                scores.append(score)
+                accuracies.append(accuracy)
+                aucs.append(auc)
+                demographic_parity_diffs.append(demographic_parity_diff)
+
+                f.write(f"  Fold {fold + 1}: Score={score:.4f}, Accuracy={accuracy:.4f}, "
+                        f"AUC={auc:.4f}, Demographic Parity Diff={demographic_parity_diff:.4f}\n")
+
+            # Average metrics across folds
+            avg_score = np.mean(scores)
+            avg_accuracy = np.mean(accuracies)
+            avg_auc = np.mean(aucs)
+            avg_demographic_parity_diff = np.mean(demographic_parity_diffs)
+
+            results.append({
+                "lambda_adv": lambda_adv,
+                "epochs": epochs,
+                "batch_size": batch_size,
+                "score": avg_score,
+                "accuracy": avg_accuracy,
+                "auc": avg_auc,
+                "demographic_parity_diff": avg_demographic_parity_diff
+            })
+
+            f.write(f"  Final (Avg) for lambda_adv={lambda_adv}, epochs={epochs}, batch_size={batch_size}: "
+                    f"Score={avg_score:.4f}, Accuracy={avg_accuracy:.4f}, AUC={avg_auc:.4f}, "
+                    f"Demographic Parity Diff={avg_demographic_parity_diff:.4f}\n")
+
+        results_df = pd.DataFrame(results)
+        best_params = results_df.loc[results_df["score"].idxmax()]
+        f.write("\nBest Hyperparameters:\n")
+        f.write(best_params.to_string())
+
+
+
 
 
 

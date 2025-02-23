@@ -1,0 +1,5 @@
+{
+    "dataset_name":"german", 
+    "data_url":"https://archive.ics.uci.edu/ml/machine-learning-databases/statlog/german/german.data",
+    "output_file":"cv_german.txt"
+}

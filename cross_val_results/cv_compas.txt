@@ -1,0 +1,39 @@
+Loading and preprocessing compas data...
+
+Testing lambda_adv=1.0, epochs=32, batch_size=64
+  Fold 1: Score=1.1341, Accuracy=0.6746, AUC=0.6624, Demographic Parity Diff=0.2030
+  Fold 2: Score=1.1156, Accuracy=0.6710, AUC=0.6607, Demographic Parity Diff=0.2161
+  Fold 3: Score=1.1299, Accuracy=0.6713, AUC=0.6655, Demographic Parity Diff=0.2070
+  Final (Avg) for lambda_adv=1.0, epochs=32, batch_size=64: Score=1.1265, Accuracy=0.6723, AUC=0.6629, Demographic Parity Diff=0.2087
+
+Testing lambda_adv=1.0, epochs=32, batch_size=128
+  Fold 1: Score=1.1332, Accuracy=0.6700, AUC=0.6603, Demographic Parity Diff=0.1970
+  Fold 2: Score=1.1143, Accuracy=0.6637, AUC=0.6553, Demographic Parity Diff=0.2047
+  Fold 3: Score=1.1121, Accuracy=0.6630, AUC=0.6607, Demographic Parity Diff=0.2116
+  Final (Avg) for lambda_adv=1.0, epochs=32, batch_size=128: Score=1.1199, Accuracy=0.6656, AUC=0.6587, Demographic Parity Diff=0.2044
+
+Testing lambda_adv=1.0, epochs=32, batch_size=256
+  Fold 1: Score=1.1114, Accuracy=0.6668, AUC=0.6548, Demographic Parity Diff=0.2102
+  Fold 2: Score=0.7662, Accuracy=0.4309, AUC=0.4232, Demographic Parity Diff=0.0879
+  Fold 3: Score=1.1011, Accuracy=0.6594, AUC=0.6598, Demographic Parity Diff=0.2181
+  Final (Avg) for lambda_adv=1.0, epochs=32, batch_size=256: Score=0.9929, Accuracy=0.5857, AUC=0.5793, Demographic Parity Diff=0.1721
+
+Testing lambda_adv=1.0, epochs=64, batch_size=64
+  Fold 1: Score=1.1249, Accuracy=0.6694, AUC=0.6597, Demographic Parity Diff=0.2043
+  Fold 2: Score=1.1005, Accuracy=0.6642, AUC=0.6522, Demographic Parity Diff=0.2159
+  Fold 3: Score=1.1166, Accuracy=0.6739, AUC=0.6667, Demographic Parity Diff=0.2240
+  Final (Avg) for lambda_adv=1.0, epochs=64, batch_size=64: Score=1.1140, Accuracy=0.6692, AUC=0.6595, Demographic Parity Diff=0.2148
+
+Testing lambda_adv=1.0, epochs=64, batch_size=128
+  Fold 1: Score=1.1214, Accuracy=0.6700, AUC=0.6544, Demographic Parity Diff=0.2031
+  Fold 2: Score=1.0994, Accuracy=0.6684, AUC=0.6556, Demographic Parity Diff=0.2246
+  Fold 3: Score=1.1334, Accuracy=0.6807, AUC=0.6725, Demographic Parity Diff=0.2198
+  Final (Avg) for lambda_adv=1.0, epochs=64, batch_size=128: Score=1.1180, Accuracy=0.6730, AUC=0.6609, Demographic Parity Diff=0.2158
+
+Testing lambda_adv=1.0, epochs=64, batch_size=256
+  Fold 1: Score=1.1221, Accuracy=0.6715, AUC=0.6612, Demographic Parity Diff=0.2107
+  Fold 2: Score=1.1132, Accuracy=0.6689, AUC=0.6584, Demographic Parity Diff=0.2141
+  Fold 3: Score=1.1284, Accuracy=0.6687, AUC=0.6642, Demographic Parity Diff=0.2045
+  Final (Avg) for lambda_adv=1.0, epochs=64, batch_size=256: Score=1.1212, Accuracy=0.6697, AUC=0.6613, Demographic Parity Diff=0.2098
+
+Testing lambda_adv=1.0, epochs=128, batch_size=64

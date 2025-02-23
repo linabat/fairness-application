@@ -9,7 +9,8 @@ sys.path.append(src_path)
 
 from etl import (
     main_binary,
-    main_synthetic
+    main_synthetic,
+    cross_validation_data
 )
     
 if __name__ == '__main__':
@@ -33,4 +34,22 @@ if __name__ == '__main__':
     if 'synthetic_binary' in args: 
         with open("config/synthetic_binary.json", "r") as file:
             config = json.load(file)
-        main_synthetic(**config) ## need to add the synthetic config
+        main_synthetic(**config) ## the configs added are the ones after doing cross validation
+
+    if 'cv_adults' in args: 
+        with open("config/cv_adults.json", "r") as file:
+            config = json.load(file)
+        cross_validation_data(**config) ## the configs added are the ones after doing cross validation
+
+    if 'cv_german' in args: 
+        with open("config/cv_german.json", "r") as file:
+            config = json.load(file)
+        cross_validation_data(**config) ## the configs added are the ones after doing cross validation
+
+    if 'cv_compas' in args: 
+        with open("config/cv_compas.json", "r") as file:
+            config = json.load(file)
+        cross_validation_data(**config) ## the configs added are the ones after doing cross validation
+
+
+
