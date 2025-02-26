@@ -1,0 +1,7 @@
+{
+    "dataset_name":"drug_multi", 
+    "lambda_adv":1.5,
+    "epochs":64, 
+    "batch_size":128, 
+    "output_dir":"model_results"
+}

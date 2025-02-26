@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 import tensorflow as tf
 import seaborn as sns
+import matplotlib.pyplot as plt
 import os
 import random
 import datetime
@@ -217,7 +218,7 @@ def compute_fairness_metrics_manual(y_true, y_pred, sensitive_features):
         tpr = np.sum((y_pred_g == 1) & (y_true_g == 1)) / (np.sum(y_true_g == 1) + 1e-8) # True Positive Rate
         fpr = np.sum((y_pred_g == 1) & (y_true_g == 0)) / (np.sum(y_true_g == 0) + 1e-8) # False Positive Rate
         metrics[g] = (tpr, fpr)
-    eo_diff = (abs(metrics[0][0] - metrics[1][0]) + abs(metrics[0][1] - metrics[1][1])) # taking average of two error types
+    eo_diff = (abs(metrics[0][0] - metrics[1][0]) + abs(metrics[0][1] - metrics[1][1]))/2 # taking average of two error types
 
     # Selection rate per group.
     """
@@ -246,9 +247,6 @@ def compute_fairness_metrics_manual(y_true, y_pred, sensitive_features):
 # -------------------------------
 # Plotting Function
 # -------------------------------
-import pandas as pd
-import matplotlib.pyplot as plt
-
 def plot_comparison(metrics_baseline, metrics_fair, plot_file_path):
     """
     Generates a comparison plot and a table displaying numerical values of evaluation metrics.
@@ -316,7 +314,7 @@ def main_binary(data_url, dataset_name, lambda_adv=1.0, epochs=64, batch_size=12
         with open(log_file_path, 'a') as f: 
             f.write(message + '\n')
     
-    open(log_file_path, 'w').close() # deleting previous log if it exist s
+    open(log_file_path, 'w').close() 
 
     set_seed(42)
                      
@@ -373,7 +371,7 @@ def main_binary(data_url, dataset_name, lambda_adv=1.0, epochs=64, batch_size=12
                   epochs=epochs, batch_size=batch_size, verbose=1)
 
     # Get pseudo-label predictions.
-    pseudo_Y_train, S_pred, Y_pred_train = adv_model.predict([X_train, S_train_oh]) ## do we want psuedo_Y or Y_pred? psuedo_Y is for complete fairness why pred_Y can be a bit more accurate by keep necessary dependencies
+    pseudo_Y_train, S_pred, Y_pred_train = adv_model.predict([X_train, S_train_oh]) 
     pseudo_Y_test,  S_pred, Y_pred_test = adv_model.predict([X_test, S_test_oh])
 
     # Threshold pseudo-labels to get binary labels.
@@ -744,8 +742,393 @@ def main_synthetic(lambda_adv=1.0, epochs=64, batch_size=128, output_dir='model_
     append_text_to_image(plot_file_path, summary_text)
 
 """
+Application of Model on Multiclass for Y
+"""
+
+# -------------------------------
+# Adversarial Debiasing Model
+# -------------------------------
+
+## has been adjusted for multiclass
+def multi_build_adversarial_model(input_dim, num_classes_Y, lambda_adv=1.0):
+    """
+    Build an adversarial debiasing model that learns pseudo‑labels Y' from X.
+
+    Architecture:
+      - Main branch (encoder): from X, several dense layers produce a latent pseudo‑label pseudo_Y (via sigmoid).
+      - Adversary branch: pseudo_Y is passed through a Gradient Reversal Layer and then dense layers predict S.
+      - Decoder branch: concatenates pseudo_Y and the one-hot sensitive attribute S to predict the observed label Y.
+
+    Losses:
+      - For the main branch, binary crossentropy between observed Y and pseudo_Y (and Y_pred).
+      - For the adversary branch, categorical crossentropy to predict S.
+
+    Returns a compiled Keras model that takes inputs X and S (one-hot encoded) and outputs:
+      [pseudo_Y, S_pred, Y_pred].
+    """
+    X_input = tf.keras.Input(shape=(input_dim,), name="X")
+    S_input = tf.keras.Input(shape=(2,), name="S")  # one-hot encoded S
+
+    # Main branch: Encoder for pseudo-label.
+    h = Dense(64, activation='relu')(X_input)
+    h = BatchNormalization()(h)
+    h = Dense(32, activation='relu')(h)
+    h = BatchNormalization()(h)
+    pseudo_Y = Dense(num_classes_Y, activation='softmax', name="pseudo_Y")(h) ## changed to softmax because multi-class
+
+    # Adversary branch: from pseudo_Y, with GRL.
+    """
+    This is to prevent psuedo_Y from containing information about S
+    - adversary will try to predict S from pseudo_Y (fair label)...if it can accurately predict S, then Y' still encodes information about S (don't want this) 
+    - use the gradient reversal layer to prevent this from happening
+    """
+    grl = GradientReversalLayer(lambda_=lambda_adv)(pseudo_Y)
+    a = Dense(32, activation='relu')(grl)
+    a = BatchNormalization()(a)
+    S_pred = Dense(2, activation='softmax', name="S_pred")(a)
+
+    # Decoder branch: combine pseudo_Y and S to predict observed Y.
+    concat = Concatenate()([pseudo_Y, S_input])
+    d = Dense(16, activation='relu')(concat)
+    d = BatchNormalization()(d)
+    Y_pred = Dense(num_classes_Y, activation='softmax', name="Y_pred")(d) # changed from 1 to num_classes_Y, changed to softmax cause multi
+
+    model = tf.keras.Model(inputs=[X_input, S_input],
+                           outputs=[pseudo_Y, S_pred, Y_pred])
+    model.compile(optimizer=tf.keras.optimizers.Adam(1e-4),
+                  loss={"pseudo_Y": "categorical_crossentropy", # changed from binary to categorical
+                        "S_pred": "categorical_crossentropy",
+                        "Y_pred": "categorical_crossentropy"}, # changed from binary to categorical
+                  loss_weights={"pseudo_Y": 1.0, "S_pred": lambda_adv, "Y_pred": 1.0},
+                  metrics={"pseudo_Y": "accuracy",
+                           "S_pred": "accuracy",
+                           "Y_pred": "accuracy"}) # Y_pred is the best estimate of Y accounting for fair dependencies 
+    return model
+
+
+
+
+def multi_compute_fairness_metrics_manual(y_true, y_pred, sensitive_features):
+    """
+    Compute fairness metrics manually for multi-class classification.
+    
+    Args:
+      y_true: Ground-truth labels (1D numpy array, categorical).
+      y_pred: Predicted labels (1D numpy array, categorical).
+      sensitive_features: 1D numpy array (binary sensitive attribute).
+    
+    Returns:
+      Dictionary containing:
+        - Demographic parity difference
+        - Equalized odds difference
+        - Selection rates per group
+        - Group-wise accuracy
+    """
+    
+    # Ensure inputs are numpy arrays
+    y_true = np.array(y_true)
+    y_pred = np.array(y_pred)
+    sensitive_features = np.array(sensitive_features)
+
+    groups = np.unique(sensitive_features)  # Unique groups in sensitive attribute
+    classes = np.unique(y_true)  # Unique class labels
+
+    # -----------------------
+    # Demographic Parity Difference
+    # -----------------------
+    
+    # For each group in the sensitive feature, find the demographic parity and compute the difference (based on the formula in above comment) -- will look at each proportion per class
+    class_rates = {g: np.zeros(len(classes)) for g in groups}
+
+    for g in groups:
+        mask = (sensitive_features == g)  # Filter by group
+        for i, cl in enumerate(classes):  # Iterate over class labels
+            class_rates[g][i] = np.mean(y_pred[mask] == cl)  # Proportion of predictions for class c
+    
+    dp_diff = np.max([np.abs(class_rates[g1] - class_rates[g2]) 
+                      for g1 in groups for g2 in groups if g1 != g2])
+
+    # -----------------------
+    # Ensuring the different groups in the sensitive feature similar TPR and FPR rates -- this is so that the model isn't discriminating in error types
+    # -----------------------
+    """
+    Ensuring that different groups in the sensitive feature have similar TPR and FPR rates
+    This prevents the model from discriminating based on error types.
+    """
+    metrics = {g: {c: {"TPR": 0, "FPR": 0} for c in classes} for g in groups}
+
+    y_true = np.argmax(y_true, axis=1) if len(y_true.shape) > 1 else y_true # categorical
+
+    for g in groups:
+        mask = (sensitive_features == g)
+        y_true_g = y_true[mask]
+        y_pred_g = y_pred[mask]
+
+        for c in classes:
+            tp = np.sum((y_pred_g == c) & (y_true_g == c))
+            fn = np.sum((y_pred_g != c) & (y_true_g == c))
+            fp = np.sum((y_pred_g == c) & (y_true_g != c))
+            tn = np.sum((y_pred_g != c) & (y_true_g != c))
+
+            # Avoid division by zero
+            metrics[g][c]["TPR"] = tp / (tp + fn) if (tp + fn) > 0 else 0
+            metrics[g][c]["FPR"] = fp / (fp + tn) if (fp + tn) > 0 else 0
+
+    # Compute max difference across groups
+    eo_diff_vals = []
+    for g1 in groups:
+        for g2 in groups:
+            if g1 != g2:   # trying to compare tpr and fpr across the different groupss
+                for c in classes:
+                    tpr_diff = np.abs(metrics[g1][c]["TPR"] - metrics[g2][c]["TPR"])
+                    fpr_diff = np.abs(metrics[g1][c]["FPR"] - metrics[g2][c]["FPR"])
+                    eo_diff_vals.append(tpr_diff + fpr_diff)
+
+    eo_diff = np.max(eo_diff_vals) if eo_diff_vals else 0  # Avoid empty list issue
+
+    # -----------------------
+    # Selection Rate Per Group
+    # proportion of samples predicted as positive for each group -- a group has a higher selection rate, the model may favor that group unfairly
+    # -----------------------
+    selection_rate = {g: class_rates[g].tolist() for g in groups}
+
+    # -----------------------
+    # Group-Wise Accuracy
+    # for each group in the sensitive feature, compute the accuracy of the model (to ensure that it's perfoming consistently across groups)
+    # -----------------------
+    group_acc = {}
+    for g in groups:
+        mask = (sensitive_features == g)
+        group_acc[g] = accuracy_score(y_true[mask], y_pred[mask])
+
+    return {
+        "demographic_parity_difference": dp_diff,
+        "equalized_odds_difference": eo_diff,
+        "selection_rate": selection_rate,
+        "group_accuracy": group_acc
+    }
+
+
+# -------------------------------
+# Plotting Function for Multiclass
+# -------------------------------
+def multi_plot_comparison(metrics_baseline, metrics_fair, plot_file_path):
+    """
+    parameters are dictionaries with the stored values of the evaluation metrics
+    """
+    models = ['Baseline', 'Fair']
+    aucs = [metrics_baseline['auc'], metrics_fair['auc']]
+    accs = [metrics_baseline['accuracy'], metrics_fair['accuracy']]
+    dp_diff = [metrics_baseline["demographic_parity_difference"], metrics_fair["demographic_parity_difference"]]
+    eo_diff = [metrics_baseline["equalized_odds_difference"], metrics_fair["equalized_odds_difference"]]
+
+    # creating a 2x3 gird of bar chars comparing baseline model and fair model across: AUC, accuracy, demographic parity diff, equalized odd difference
+    fig, axs = plt.subplots(2, 2, figsize=(14, 10))
+
+    ## measures how well the model seperates postiive and negative classes, higher AUC = better model performance
+    # if fair model has a lower AUC than the baseline, can indicate a fairness-performance tradeoff (meaning less well seperation for more fair results)
+    axs[0,0].bar(models, aucs, color=['blue', 'green'])
+    axs[0,0].set_title('AUC')
+    axs[0,0].set_ylim([0, 1])
+
+    ## correct pred/total pred
+    ## fairness may lower accuracy 
+    axs[0,1].bar(models, accs, color=['blue', 'green'])
+    axs[0,1].set_title('Accuracy')
+    axs[0,1].set_ylim([0, 1])
+
+    axs[1,0].bar(models, dp_diff, color=['orange', 'purple'])
+    axs[1,0].set_title('Demographic Parity Difference')
+
+    ## lower value - better fairness
+    ## equalized odds is satisfied if tpr and fpr are equal across the different groups in the sensitive feature
+    axs[1,1].bar(models, eo_diff, color=['orange', 'purple'])
+    axs[1,1].set_title('Equalized Odds Difference')
+
+    plt.suptitle("Comparison: Baseline (X → Y) vs. Fair (X → Y') Model")
+    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+    plt.savefig(plot_file_path, bbox_inches="tight")
+    plt.close()
+
+def multi_main(dataset_name, lambda_adv=1.0, epochs=60, batch_size=128, output_dir='model_results'):
+    set_seed(42)
+    
+    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+
+    drug_path = "data/drug_consumption.csv" # needs to manually be added by user
+    drug_path = os.path.join(repo_root, drug_path)
+
+    # creating folder for output results
+    output_path = os.path.join(repo_root, output_dir)
+    os.makedirs(output_path, exist_ok=True)
+    
+    log_file_path = os.path.join(output_path, f'{dataset_name}_results_log.txt')
+    plot_file_path = os.path.join(output_path, f'{dataset_name}_comparison_plot.png')
+
+    open(log_file_path, 'w').close() 
+
+
+    def log(message):
+        with open(log_file_path, 'a') as f: 
+            f.write(message + '\n')
+
+    if dataset_name == "drug_multi":
+        X, Y_obs, S = load_and_process_drug_consumption_data(drug_path) ##  Y is multi class, S is binary
+        num_classes_Y = len(np.unique(Y_obs))
+
+    elif dataset_name == "health_multi":
+        X, Y_obs, S = load_and_process_health_data(data_url) ##  Y is multi class, S is binary
+        num_classes_Y = len(np.unique(Y_obs))
+        
+    else:
+        print ("Invalid dataset_name")
+        return 
+    
+    print(f"Loading and preprocessing {dataset_name} data...")
+    X_train, X_test, Y_train_obs, Y_test_obs, S_train, S_test = train_test_split(
+        X, Y_obs, S, test_size=0.2, random_state=42
+    )
+
+    if dataset_name == "drug_multi":
+        log(f"Features shape: {X.shape}")
+        log(f"Observed Label Y shape: {Y_obs.shape} (Label from 'drug consumption')")
+        log(f"Sensitive Attribute (Education) shape: {S.shape}")
+
+    elif dataset_name == "health_multi":
+        log(f"Features shape: {X.shape}")
+        log(f"Observed Label Y shape: {Y_obs.shape} (Label from 'health readmission')")
+        log(f"Sensitive Attribute (Gender) shape: {S.shape}")
+
+    input_dim = X_train.shape[1]
+
+    # One-hot encode S for adversarial model training.
+    S_train_oh = tf.keras.utils.to_categorical(S_train, num_classes=2) 
+    S_test_oh  = tf.keras.utils.to_categorical(S_test, num_classes=2) 
+
+    # need to one hot encode Y
+    Y_train_obs = tf.keras.utils.to_categorical(Y_train_obs, num_classes=num_classes_Y)
+    Y_test_obs = tf.keras.utils.to_categorical(Y_test_obs, num_classes=num_classes_Y)
+    
+    Y_train_obs_1d = np.argmax(Y_train_obs, axis=1) 
+    Y_test_obs_1d = np.argmax(Y_test_obs, axis=1)  
+
+    ### 1. Train adversarial debiasing model (X → Y' with adversary)
+    log("\nTraining adversarial model (X → Y' with adversary) ...")
+    adv_model = multi_build_adversarial_model(input_dim, num_classes_Y, lambda_adv)
+    adv_model.fit([X_train, S_train_oh],
+                  {"pseudo_Y": Y_train_obs, "S_pred": S_train_oh, "Y_pred": Y_train_obs},
+                  epochs=epochs, batch_size=batch_size, verbose=1)
+
+    # Get pseudo-label predictions.
+    pseudo_Y_train, S_pred_train, Y_pred_train = adv_model.predict([X_train, S_train_oh]) 
+    pseudo_Y_test,  S_pred_test, Y_pred_test = adv_model.predict([X_test, S_test_oh])
+
+    # Threshold pseudo-labels to get binary labels.
+    Y_pred_train_bin = np.argmax(pseudo_Y_train, axis= 1)
+    Y_pred_test_bin  = np.argmax(pseudo_Y_test, axis=1) 
+
+    log("\nPseudo-label statistics (training):")
+    for g in np.unique(S_train):
+        mask = (S_train == g)
+        log(f"Group {g} pseudo-positive rate: {np.mean(Y_pred_train_bin[mask]):.4f}")
+        
+    log("\nTraining baseline logistic regression classifier (X → Y)...")
+    baseline_clf = LogisticRegression(multi_class='multinomial', solver='lbfgs', max_iter=1000)
+    baseline_clf.fit(X_train, Y_train_obs_1d)
+    
+    baseline_preds = baseline_clf.predict_proba(X_test)    
+    baseline_auc = roc_auc_score(Y_test_obs, baseline_preds, multi_class="ovr")
+    baseline_preds_class = baseline_preds.argmax(axis=1)
+    baseline_acc = accuracy_score(Y_test_obs_1d, baseline_preds_class)
+
+    baseline_fairness = multi_compute_fairness_metrics_manual(Y_test_obs, baseline_preds_class, sensitive_features=S_test)
+
+    log("\nTraining fair logistic regression classifier (X → Y') using Y_pred labels...")
+    fair_clf = LogisticRegression(multi_class='multinomial', solver='lbfgs', max_iter=1000)
+    fair_clf.fit(X_train, Y_pred_train_bin)
+    fair_preds = fair_clf.predict_proba(X_test)
+    fair_auc = roc_auc_score(Y_test_obs, fair_preds, multi_class='ovr')
+    fair_preds_class = fair_preds.argmax(axis=1)
+    fair_acc = accuracy_score(Y_test_obs_1d, fair_preds_class)
+
+    fair_fairness = multi_compute_fairness_metrics_manual(Y_test_obs, fair_preds_class, sensitive_features=S_test)
+
+    # Aggregate metrics for plotting.
+    metrics_baseline = {
+        "auc": baseline_auc,
+        "accuracy": baseline_acc,
+        "demographic_parity_difference": baseline_fairness["demographic_parity_difference"],
+        "equalized_odds_difference": baseline_fairness["equalized_odds_difference"]
+    }
+    metrics_fair = {
+        "auc": fair_auc,
+        "accuracy": fair_acc,
+        "demographic_parity_difference": fair_fairness["demographic_parity_difference"],
+        "equalized_odds_difference": fair_fairness["equalized_odds_difference"]
+    }
+
+    log("\nBaseline Logistic Regression (X → Y) Evaluation:")
+    log(f"AUC: {baseline_auc:.4f}, Accuracy: {baseline_acc:.4f}")
+    log(f"Fairness metrics: {baseline_fairness}")
+
+    log("\nFair Logistic Regression (X → Y') Evaluation (compared to observed Y):")
+    log(f"AUC: {fair_auc:.4f}, Accuracy: {fair_acc:.4f}")
+    log(f"Fairness metrics: {fair_fairness}")
+
+    # Plot comparison.
+    multi_plot_comparison(metrics_baseline, metrics_fair, plot_file_path)
+
+
+def load_and_process_drug_consumption_data(path):
+    
+    df = pd.read_csv(path)
+    df.columns = df.columns.str.lower().str.strip()
+    
+    # convert to 4 classes
+    df = df[df.columns[1:]]
+    df = df.replace(
+        {
+            "cannabis": {
+                "CL0": "never_used",
+                "CL1": "not_in_last_year",
+                "CL2": "not_in_last_year",
+                "CL3": "used_in_last_year",
+                "CL4": "used_in_last_year",
+                "CL5": "used_in_last_week",
+                "CL6": "used_in_last_week",
+            }
+        }
+    )
+    
+    educated_cat = {
+        "University degree",
+        "Masters degree",
+        "Doctorate degree",
+        "Professional certificate/ diploma"
+    }
+    
+    df["education"] = df["education"].apply(lambda x: 1 if x in educated_cat else 0)
+    
+    # changing to numerical representation
+    label_encoder = LabelEncoder()
+    # df["age"] = label_encoder.fit_transform(df["age"]) 
+    df["country"] = label_encoder.fit_transform(df["country"])
+    df["ethnicity"] = label_encoder.fit_transform(df["ethnicity"])
+    df["cannabis"] = label_encoder.fit_transform(df["cannabis"])
+
+    df["gender"] = df["gender"].apply(lambda x: 1 if x == "M" else 0)
+    
+    X = df[df.columns[1:12]]
+    Y = df["cannabis"].to_numpy()
+    S = df["education"].to_numpy()
+    X = X.drop(columns = ["education"])
+
+    return X, Y, S
+
+"""
 CROSS VALIDATION FOR REAL WORLD DATASETS
 """
+
 def compute_fairness_metrics_cv(y_true, y_pred, sensitive_features):
     """
     Compute fairness metrics manually along with performance metrics.
@@ -901,8 +1284,8 @@ def cross_validation_data(dataset_name, data_url, output_file):
 
         param_grid = {
             "lambda_adv": [1.0, 3.0, 5.0, 7.0, 15.0],
-            "epochs": [32, 64, 128],
-            "batch_size": [64, 128, 256]
+            "epochs": [32, 64],
+            "batch_size": [64, 128]
         }
 
         cv = StratifiedKFold(n_splits=3, shuffle=True, random_state=42)

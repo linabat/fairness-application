@@ -1,6 +1,8 @@
 {
     "data_url":"https://archive.ics.uci.edu/ml/machine-learning-databases/statlog/german/german.data", 
     "dataset_name":"german", 
-    "lambda_adv":1.0,
+    "lambda_adv":6.5,
+    "epochs":72, 
+    "batch_size":128,
     "output_dir":"model_results"
 }

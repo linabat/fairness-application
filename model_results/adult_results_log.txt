@@ -6,7 +6,17 @@ Sensitive Attribute (Sex) shape: (32561,)
 Training adversarial model (X → Y' with adversary) ...
 
 Pseudo-label statistics (training):
-Group 0 pseudo-positive rate: 0.0730
-Group 1 pseudo-positive rate: 0.2276
+Group 0 pseudo-positive rate: 0.1067
+Group 1 pseudo-positive rate: 0.1659
 
 Training baseline logistic regression classifier (X → Y)...
+
+Training fair logistic regression classifier (X → Y') using pseudo-labels...
+
+Baseline Logistic Regression (X → Y) Evaluation:
+AUC: 0.8095, Accuracy: 0.7877
+Fairness metrics: {'demographic_parity_difference': 0.07640872577213828, 'equalized_odds_difference': 0.0822236824107273, 'selection_rate': {0: 0.0799623706491063, 1: 0.15637109642124458}, 'group_accuracy': {0: 0.8715898400752587, 1: 0.7469797127877821}}
+
+Fair Logistic Regression (X → Y') Evaluation (compared to observed Y):
+AUC: 0.7776, Accuracy: 0.7887
+Fairness metrics: {'demographic_parity_difference': 0.044452833684401935, 'equalized_odds_difference': 0.03359772582298458, 'selection_rate': {0: 0.08137347130761995, 1: 0.12582630499202188}, 'group_accuracy': {0: 0.8682972718720602, 1: 0.7501709596535218}}

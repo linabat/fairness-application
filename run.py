@@ -10,7 +10,8 @@ sys.path.append(src_path)
 from etl import (
     main_binary,
     main_synthetic,
-    cross_validation_data
+    cross_validation_data, 
+    multi_main
 )
     
 if __name__ == '__main__':
@@ -39,17 +40,24 @@ if __name__ == '__main__':
     if 'cv_adults' in args: 
         with open("config/cv_adults.json", "r") as file:
             config = json.load(file)
-        cross_validation_data(**config) ## the configs added are the ones after doing cross validation
+        cross_validation_data(**config) 
 
     if 'cv_german' in args: 
         with open("config/cv_german.json", "r") as file:
             config = json.load(file)
-        cross_validation_data(**config) ## the configs added are the ones after doing cross validation
+        cross_validation_data(**config) 
 
     if 'cv_compas' in args: 
         with open("config/cv_compas.json", "r") as file:
             config = json.load(file)
-        cross_validation_data(**config) ## the configs added are the ones after doing cross validation
+        cross_validation_data(**config) 
+
+    if 'drug_multi' in args:  ## TEST THIS OUT
+        with open("config/drug_multi.json", "r") as file:
+            config = json.load(file)
+        multi_main(**config) ## the configs added are the ones after doing cross validation
+
+
 
 
 
