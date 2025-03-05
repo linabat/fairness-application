@@ -26,6 +26,10 @@ conda activate fairness-applications
 ```bash
 pip install -r requirements.txt
 ```
+
+We evaluated our model on two different scenarions. The first scenario being where the observed label is binary. The second scenario is where the observed label is multi-class. In both scenarios, the sensitive feature is binary. 
+
+#### Binary Dataset Results
 We looked at synthetic data where we have true unbiased data and data with injected biased error
 **To retrieve results for the Synethic data**
     -Run in terminal
@@ -42,23 +46,43 @@ Let's start by looking at the results for the **UCI adults dataset**. You can fi
    python run.py adult_data
    ```
 
-**To retrieve results for German Credit Score**
+**To retrieve results for German Credit Score** You can find this dataset [here](https://archive.ics.uci.edu/dataset/144/statlog+german+credit+data).
     -Run in terminal
    ```bash
    python run.py german_data
    ```
 
-**To retrieve results for Compas**
+**To retrieve results for Compas** You can find this dataset [here](https://github.com/propublica/compas-analysis). 
     -Run in terminal
    ```bash
    python run.py compas_data
    ```
 
-*The results for all 3 of these datasets will be outputed in the **model_results** folder*
-The **model_results** folder will contain two different types of file. 
-    -**.txt** which will contain the log messages for the different datasets that were run 
-    -**.png** which will contain a visualization that shows the comparison between the baseline and adversarial model
+#### Multi-Class Dataset Results
 
+We looked also looked synthetic data where we have true unbiased data and data with injected biased error.
+**To retrieve results for the Synethic data**
+    -Run in terminal
+   ```bash
+   python run.py synthetic_multiClass
+   ```
+
+We then looked at a real world dataset where the the sensitive and observed labels are multi-class values. This is to evalute how well or code is working.  
+**To retrieve results for Drug Consumption - Cannabis** You can find this dataset [here](https://www.kaggle.com/datasets/obeykhadija/drug-consumptions-uci). 
+    - Download this dataset as a csv, name it 
+    ``` bash
+    "drug_consumption.csv"  
+    ```
+    - Create and place the csv in a "data" folder in the main directory of this repo
+    -Run in terminal
+   ```bash
+   python run.py compas_data
+   ```
+### Results
+*The results for all these datasets will be outputed in the **model_results** folder*
+The **model_results** folder will contain two different types of file. 
+    -**.txt** which will contain the log messages for the different datasets that were run, including metric values
+    -**.png** which will contain visualizations that shows the comparison between the baseline and adversarial model. There are 2 visualizations that are outputted per dataset. The first visualization will be direct comparison between fairness and a confidence evaluation. The second visualization will include the all 4 evalatuion metrics we used for general evaluation. 
 
 **NOTE: If an error about tensorflow.keras module not found run**
 
