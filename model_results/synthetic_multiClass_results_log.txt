@@ -1,0 +1,15 @@
+
+Pseudo-label statistics (training):
+
+Training baseline [BIASED] logistic regression classifier (X → Y)...
+
+Training fair logistic regression classifier (X → Y') using pseudo-labels...
+COMPLETELY FAIR (before error injection): Baseline: AUC: 0.9984, Accuracy: 0.9660, Demographic Parity Difference: 0.0236, Equalized Odds Difference: 0.0471
+
+Baseline Logistic Regression (X → Y) Evaluation:
+AUC: 0.9366, Accuracy: 0.7410
+Fairness metrics: {'demographic_parity_difference': 0.1037593984962406, 'equalized_odds_difference': 0.2652603915545839, 'selection_rate': {0: [0.3657142857142857, 0.21523809523809523, 0.26285714285714284, 0.15619047619047619], 1: [0.16, 0.28210526315789475, 0.26105263157894737, 0.2968421052631579]}, 'group_accuracy': {0: 0.7238095238095238, 1: 0.76}}
+
+Fair Logistic Regression (X → Y') Evaluation (compared to observed Y):
+AUC: 0.9496, Accuracy: 0.7250
+Fairness metrics: {'demographic_parity_difference': 0.06486215538847118, 'equalized_odds_difference': 0.1812806066934794, 'selection_rate': {0: [0.44761904761904764, 0.12571428571428572, 0.22476190476190477, 0.2019047619047619], 1: [0.3178947368421053, 0.14526315789473684, 0.22526315789473683, 0.31157894736842107]}, 'group_accuracy': {0: 0.6933333333333334, 1: 0.76}}

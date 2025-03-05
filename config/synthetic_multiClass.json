@@ -1,5 +1,6 @@
 {
-    "lambda_adv":3.0, 
+    "dataset_name":"synthetic",
+    "lambda_adv":1.0, 
     "epochs":64, 
     "batch_size":128,
     "output_dir":"model_results"

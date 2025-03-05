@@ -35,8 +35,19 @@ if __name__ == '__main__':
     if 'synthetic_binary' in args: 
         with open("config/synthetic_binary.json", "r") as file:
             config = json.load(file)
-        main_synthetic(**config) ## the configs added are the ones after doing cross validation
+        main_synthetic(**config)
 
+    if 'drug_multi' in args:  
+        with open("config/drug_multi.json", "r") as file:
+            config = json.load(file)
+        multi_main(**config) 
+        
+    if 'synthetic_mutliClass' in args: 
+        with open("config/synthetic_multiClass.json", "r") as file:
+            config = json.load(file)
+        multi_main(**config) 
+
+    #  Run this section if want to look at cross validation results
     if 'cv_adults' in args: 
         with open("config/cv_adults.json", "r") as file:
             config = json.load(file)
@@ -51,11 +62,6 @@ if __name__ == '__main__':
         with open("config/cv_compas.json", "r") as file:
             config = json.load(file)
         cross_validation_data(**config) 
-
-    if 'drug_multi' in args:  ## TEST THIS OUT
-        with open("config/drug_multi.json", "r") as file:
-            config = json.load(file)
-        multi_main(**config) ## the configs added are the ones after doing cross validation
 
 
 

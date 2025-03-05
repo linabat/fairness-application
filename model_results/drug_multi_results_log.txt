@@ -1,3 +1,4 @@
+Loading and preprocessing drug_multi data...
 Features shape: (1884, 10)
 Observed Label Y shape: (1884,) (Label from 'drug consumption')
 Sensitive Attribute (Education) shape: (1884,)
@@ -5,8 +6,8 @@ Sensitive Attribute (Education) shape: (1884,)
 Training adversarial model (X → Y' with adversary) ...
 
 Pseudo-label statistics (training):
-Group 0 pseudo-positive rate: 1.3830
-Group 1 pseudo-positive rate: 1.2634
+Group 0 pseudo-positive rate: 1.5401
+Group 1 pseudo-positive rate: 1.3259
 
 Training baseline logistic regression classifier (X → Y)...
 
@@ -17,5 +18,5 @@ AUC: 0.7180, Accuracy: 0.4562
 Fairness metrics: {'demographic_parity_difference': 0.1530409356725146, 'equalized_odds_difference': 0.1799298143903881, 'selection_rate': {0: [0.14473684210526316, 0.21052631578947367], 1: [0.29777777777777775, 0.23555555555555555]}, 'group_accuracy': {0: 0.5657894736842105, 1: 0.38222222222222224}}
 
 Fair Logistic Regression (X → Y') Evaluation (compared to observed Y):
-AUC: 0.6143, Accuracy: 0.3846
-Fairness metrics: {'demographic_parity_difference': 0.13327485380116955, 'equalized_odds_difference': 0.3368478021666291, 'selection_rate': {0: [0.32894736842105265, 0.19736842105263158], 1: [0.4622222222222222, 0.19111111111111112]}, 'group_accuracy': {0: 0.40131578947368424, 1: 0.37333333333333335}}
+AUC: 0.6343, Accuracy: 0.4218
+Fairness metrics: {'demographic_parity_difference': 0.10005847953216376, 'equalized_odds_difference': 0.21889713949270304, 'selection_rate': {0: [0.17105263157894737, 0.2631578947368421], 1: [0.27111111111111114, 0.29333333333333333]}, 'group_accuracy': {0: 0.5, 1: 0.3688888888888889}}
