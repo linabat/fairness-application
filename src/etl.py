@@ -241,16 +241,64 @@ def compute_fairness_metrics_manual(y_true, y_pred, sensitive_features):
 # -------------------------------
 # Plotting Function
 # -------------------------------
-def plot_comparison(metrics_baseline, metrics_fair, plot_file_path):
+def plot_comparison(metrics_baseline, metrics_fair, plot_file_path_4, plot_file_path_2):
     """
     Generates a comparison plot and a table displaying numerical values of evaluation metrics.
     """
-    models = ['Baseline', 'Fair']
-    aucs = [metrics_baseline['auc'], metrics_fair['auc']]
+    models = ['Baseline', 'Fair Model']
     accs = [metrics_baseline['accuracy'], metrics_fair['accuracy']]
     dp_diff = [metrics_baseline["demographic_parity_difference"], metrics_fair["demographic_parity_difference"]]
+    aucs = [metrics_baseline['auc'], metrics_fair['auc']]
     eo_diff = [metrics_baseline["equalized_odds_difference"], metrics_fair["equalized_odds_difference"]]
 
+
+    fig, ax1 = plt.subplots(figsize=(10, 6))
+    ax2 = ax1.twinx()  # Create secondary y-axis
+    
+    width = 0.4  # Bar width
+    gap = 0.015   # Space between bars
+    x_indexes = np.arange(len(models))
+
+    # color blind friendly options
+    color_acc = "#006CD1"  # blue (Accuracy)
+    color_dp = "#994F00"   # brown (Demographic Parity)
+
+    bars1 = ax1.bar(x_indexes - (width/2 + gap), accs, width, color=color_acc, label="Accuracy")
+    bars2 = ax2.bar(x_indexes + (width/2 + gap), dp_diff, width, color=color_dp, label="Demographic \n Parity Difference")
+
+    # value is included at the top of the bar
+    for bar in bars1:
+        ax1.text(bar.get_x() + bar.get_width()/2, bar.get_height(), f'{bar.get_height():.2f}', 
+                 ha='center', va='bottom', fontsize=12, fontweight='bold')
+    
+    for bar in bars2:
+        ax2.text(bar.get_x() + bar.get_width()/2, bar.get_height(), f'{bar.get_height():.2f}', 
+                 ha='center', va='bottom', fontsize=12, fontweight='bold')
+
+    # remove all axis lines (keeping it minimal
+    for ax in [ax1, ax2]:
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['left'].set_visible(False)
+        
+    ax1.yaxis.set_visible(False)
+    ax2.yaxis.set_visible(False)
+
+    # Labels & Titles
+    ax1.set_xticks(x_indexes)
+    ax1.set_xticklabels(models, fontsize=12)
+    ax1.set_title("Accuracy & Fairness Comparison", fontsize=14)
+
+    # Legend (smaller and in top right corner)
+    ax1.legend(handles=[bars1, bars2], loc='upper right', fontsize=10)
+
+    # Save plot
+    plt.tight_layout()
+    plt.savefig(plot_file_path_2, bbox_inches="tight")
+    plt.close()
+
+    ## plot with all 4 metrics
+    
     # Creating a 2x2 grid of bar charts comparing metrics
     fig, axs = plt.subplots(2, 2, figsize=(14, 10))
 
@@ -271,22 +319,7 @@ def plot_comparison(metrics_baseline, metrics_fair, plot_file_path):
     # plt.suptitle("Comparison: Baseline (X → Y) vs. Fair (X → Y') Model")
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
 
-    # Creating a table of numerical values
-    metrics_table = pd.DataFrame({
-        "Metric": ["AUC", "Accuracy", "Demographic Parity Difference", "Equalized Odds Difference"],
-        "Baseline": [metrics_baseline['auc'], metrics_baseline['accuracy'], 
-                     metrics_baseline["demographic_parity_difference"], metrics_baseline["equalized_odds_difference"]],
-        "Fair": [metrics_fair['auc'], metrics_fair['accuracy'], 
-                 metrics_fair["demographic_parity_difference"], metrics_fair["equalized_odds_difference"]]
-    })
-
-    # # Adding table below the plots
-    # table_ax = fig.add_axes([0.1, -0.3, 0.8, 0.2])  # Position for the table (adjusted as needed)
-    # table_ax.axis('off')  # Hide the axis
-
-    # table_ax.table(cellText=metrics_table.values, colLabels=metrics_table.columns, cellLoc='center', loc='center')
-
-    plt.savefig(plot_file_path, bbox_inches="tight")
+    plt.savefig(plot_file_path_4, bbox_inches="tight")
     plt.close()
 
 # -------------------------------
@@ -300,7 +333,9 @@ def main_binary(data_url, dataset_name, lambda_adv=1.0, epochs=64, batch_size=12
     os.makedirs(output_path, exist_ok=True)
     
     log_file_path = os.path.join(output_path, f'{dataset_name}_results_log.txt')
-    plot_file_path = os.path.join(output_path, f'{dataset_name}_comparison_plot.png')
+    plot_file_path_4 = os.path.join(output_path, f'4_{dataset_name}_comparison_plot.png')
+    plot_file_path_2 = os.path.join(output_path, f'2_{dataset_name}_comparison_plot.png')
+
 
     def log(message):
         with open(log_file_path, 'a') as f: 
@@ -414,7 +449,7 @@ def main_binary(data_url, dataset_name, lambda_adv=1.0, epochs=64, batch_size=12
     log(f"Fairness metrics: {fair_fairness}")
 
     # Plot comparison.
-    plot_comparison(metrics_baseline, metrics_fair, plot_file_path)
+    plot_comparison(metrics_baseline, metrics_fair, plot_file_path_4, plot_file_path_2)
 
 
 ### UCI ADULTS
@@ -692,7 +727,9 @@ def main_synthetic(lambda_adv=1.0, epochs=64, batch_size=128, output_dir='model_
     os.makedirs(output_path, exist_ok=True)
     
     log_file_path = os.path.join(output_path,'synthetic_binary_results_log.txt')
-    plot_file_path = os.path.join(output_path, 'synthetic_binary_comparison_plot.png')
+    plot_file_path_4 = os.path.join(output_path, '4_synthetic_binary_comparison_plot.png')
+    plot_file_path_2 = os.path.join(output_path, '2_synthetic_binary_comparison_plot.png')
+
         
     def log(message):
         with open(log_file_path, 'a') as f: 
@@ -765,7 +802,7 @@ def main_synthetic(lambda_adv=1.0, epochs=64, batch_size=128, output_dir='model_
     log(f"Fairness metrics: {fair_fairness}")
 
     # Plot comparison.
-    plot_comparison(metrics_baseline, metrics_fair, plot_file_path)
+    plot_comparison(metrics_baseline, metrics_fair, plot_file_path_4, plot_file_path_2)
     auc, acc, dp_diff, eo_diff = run_unbiased_logistic() # APPEND THIS TO PLOT PNG THAT IS OUTPUTTED 
     summary_text = summary_text = (
         f"Fair Unbiased Model Metrics:\n"
@@ -964,43 +1001,6 @@ def multi_compute_fairness_metrics_manual(y_true, y_pred, sensitive_features, sy
             "group_accuracy": group_acc
         }
 
-# -------------------------------
-# Plotting Function for Multiclass
-# -------------------------------
-def multi_plot_comparison(metrics_baseline, metrics_fair, plot_file_path):
-    """
-    parameters are dictionaries with the stored values of the evaluation metrics
-    """
-    models = ['Baseline', 'Fair']
-    aucs = [metrics_baseline['auc'], metrics_fair['auc']]
-    accs = [metrics_baseline['accuracy'], metrics_fair['accuracy']]
-    dp_diff = [metrics_baseline["demographic_parity_difference"], metrics_fair["demographic_parity_difference"]]
-    eo_diff = [metrics_baseline["equalized_odds_difference"], metrics_fair["equalized_odds_difference"]]
-
-    fig, axs = plt.subplots(2, 2, figsize=(14, 10))
-
-    axs[0,0].bar(models, aucs, color=['blue', 'green'])
-    axs[0,0].set_title('AUC')
-    axs[0,0].set_ylim([0, 1])
-
-    ## correct pred/total pred
-    ## fairness may lower accuracy 
-    axs[0,1].bar(models, accs, color=['blue', 'green'])
-    axs[0,1].set_title('Accuracy')
-    axs[0,1].set_ylim([0, 1])
-
-    axs[1,0].bar(models, dp_diff, color=['orange', 'purple'])
-    axs[1,0].set_title('Demographic Parity Difference')
-
-    ## equalized odds is satisfied if tpr and fpr are equal across the different groups in the sensitive feature
-    axs[1,1].bar(models, eo_diff, color=['orange', 'purple'])
-    axs[1,1].set_title('Equalized Odds Difference')
-
-    plt.suptitle("Comparison: Baseline (X → Y) vs. Fair (X → Y') Model")
-    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-    plt.savefig(plot_file_path, bbox_inches="tight")
-    plt.close()
-
 def multi_main(dataset_name="drug_multi", lambda_adv=1.0, epochs=64, batch_size=128, output_dir='model_results'):
     set_seed(42)
     
@@ -1012,10 +1012,14 @@ def multi_main(dataset_name="drug_multi", lambda_adv=1.0, epochs=64, batch_size=
 
     if dataset_name == "synthetic":
         log_file_path = os.path.join(output_path,'synthetic_multiClass_results_log.txt')
-        plot_file_path = os.path.join(output_path, 'synthetic_multiClass_comparison_plot.png')
+        plot_file_path_4 = os.path.join(output_path, '4_synthetic_multiClass_comparison_plot.png')
+        plot_file_path_2 = os.path.join(output_path, '2_synthetic_multiClass_comparison_plot.png')
+
     else: 
         log_file_path = os.path.join(output_path, f'{dataset_name}_results_log.txt')
-        plot_file_path = os.path.join(output_path, f'{dataset_name}_comparison_plot.png')
+        plot_file_path_4 = os.path.join(output_path, f'4_{dataset_name}_comparison_plot.png')
+        plot_file_path_2 = os.path.join(output_path, f'2_{dataset_name}_comparison_plot.png')
+
 
     open(log_file_path, 'w').close() 
 
@@ -1163,7 +1167,7 @@ def multi_main(dataset_name="drug_multi", lambda_adv=1.0, epochs=64, batch_size=
     log(f"Fairness metrics: {fair_fairness}")
 
     # Plot comparison.
-    multi_plot_comparison(metrics_baseline, metrics_fair, plot_file_path)
+    plot_comparison(metrics_baseline, metrics_fair, plot_file_path_4, plot_file_path_2)
 
 """
 Multi-Class Real World Dataset
