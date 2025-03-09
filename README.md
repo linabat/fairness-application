@@ -21,8 +21,9 @@ conda  create -n fairness-application python=3.11.9
 ```
 Once the environment has been created, run 
 ```bash
-conda activate fairness-applications
+conda activate fairness-application
 ```
+Ensure you are in this repo's directory. 
 ```bash
 pip install -r requirements.txt
 ```
