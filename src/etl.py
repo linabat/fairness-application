@@ -241,9 +241,101 @@ def compute_fairness_metrics_manual(y_true, y_pred, sensitive_features):
 # -------------------------------
 # Plotting Function
 # -------------------------------
-def plot_comparison(metrics_baseline, metrics_fair, plot_file_path_4, plot_file_path_2):
+def synthetic_plot_comparison(metrics_baseline_fair, metrics_baseline, metrics_fair, plot_file_path_4, plot_file_path_2, plot_acc=True):
     """
     Generates a comparison plot and a table displaying numerical values of evaluation metrics.
+    """
+    models = ['Baseline Fair', 'Injected Bias', 'Fair Model']
+    
+    accs = [metrics_baseline_fair['accuracy'], metrics_baseline['accuracy'], metrics_fair['accuracy']]
+    dp_diff = [metrics_baseline_fair["demographic_parity_difference"], metrics_baseline["demographic_parity_difference"], metrics_fair["demographic_parity_difference"]]
+    aucs = [metrics_baseline_fair['auc'], metrics_baseline['auc'], metrics_fair['auc']]
+    eo_diff = [metrics_baseline_fair["equalized_odds_difference"], metrics_baseline["equalized_odds_difference"], metrics_fair["equalized_odds_difference"]]
+
+    if plot_acc:
+        focus = accs
+        bar_label = "Accuracy"
+    else:
+        focus = aucs
+        bar_label = "AUC"
+
+    fig, ax1 = plt.subplots(figsize=(14, 10))
+    ax2 = ax1.twinx()  
+
+    width = 0.4  
+    gap = 0.015   
+    x_indexes = np.arange(len(models))
+
+    color_acc = "#006CD1"  # blue
+    color_dp = "#994F00"   # brown
+
+    bars1 = ax1.bar(x_indexes - (width/2 + gap), focus, width, color=color_acc, label=bar_label)
+    bars2 = ax2.bar(x_indexes + (width/2 + gap), dp_diff, width, color=color_dp, label="Demographic \nParity \nDifference")
+
+    for bar in bars1:
+        ax1.text(bar.get_x() + bar.get_width()/2, bar.get_height(), f'{bar.get_height():.2f}', 
+                 ha='center', va='bottom', fontsize=20, fontweight='bold')
+
+    for bar in bars2:
+        ax2.text(bar.get_x() + bar.get_width()/2, bar.get_height(), f'{bar.get_height():.2f}', 
+                 ha='center', va='bottom', fontsize=20, fontweight='bold')
+
+    for ax in [ax1, ax2]:
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['left'].set_visible(False)
+
+    ax1.yaxis.set_visible(False)
+    ax2.yaxis.set_visible(False)
+
+    ax1.set_xticks(x_indexes)
+    ax1.set_xticklabels(models, fontsize=24)
+    ax1.set_title(f"{bar_label} & Fairness Comparison", fontsize=24)
+
+    ax1.legend(handles=[bars1, bars2], loc='upper right', fontsize=15)
+
+    # Save plot
+    plt.tight_layout()
+    plt.savefig(plot_file_path_2, bbox_inches="tight")
+    plt.close()
+
+    # plot with all 4 metrics
+    fig, axs = plt.subplots(2, 2, figsize=(16, 12))
+    
+    # AUC
+    bars = axs[0, 0].bar(models, aucs, color=['blue', 'green'])
+    axs[0, 0].set_title('AUC', fontsize=20)
+    axs[0, 0].set_ylim([0, 1.1])  # Slightly increase limit for space
+    axs[0, 0].bar_label(bars, labels=[f'{v:.2f}' for v in aucs], padding=3, fontsize=18)  
+    
+    # Accuracy
+    bars = axs[0, 1].bar(models, accs, color=['blue', 'green'])
+    axs[0, 1].set_title('Accuracy', fontsize=20)
+    axs[0, 1].set_ylim([0, 1.1])
+    axs[0, 1].bar_label(bars, labels=[f'{v:.2f}' for v in accs], padding=3, fontsize=18)  
+    
+    # Demographic Parity
+    bars = axs[1, 0].bar(models, dp_diff, color=['orange', 'purple'])
+    axs[1, 0].set_title('Demographic Parity Difference', fontsize=20)
+    axs[1, 0].set_ylim([0, 1.1])
+    axs[1, 0].bar_label(bars, labels=[f'{v:.2f}' for v in dp_diff], padding=3, fontsize=18)  
+    
+    # Equalized Odds
+    bars = axs[1, 1].bar(models, eo_diff, color=['orange', 'purple'])
+    axs[1, 1].set_title('Equalized Odds Difference', fontsize=20)
+    axs[1, 1].set_ylim([0, 1.1])
+    axs[1, 1].bar_label(bars, labels=[f'{v:.2f}' for v in eo_diff], padding=3, fontsize=18)
+    for ax in axs.flat:
+        ax.set_xticklabels(models, fontsize=18)
+    plt.suptitle("All Metrics: Baseline (X → Y) vs. Fair (X → Y') Model", fontsize=18)
+    plt.tight_layout(rect=[0, 0, 1, 0.96])  
+    
+    plt.savefig(plot_file_path_4, bbox_inches="tight")
+    plt.close()
+
+def plot_comparison(metrics_baseline, metrics_fair, plot_file_path_4, plot_file_path_2, plot_acc = True):
+    """
+    Generates a comparison plot and a table displaying numerical values of evaluation metrics. Used for real-world datasets
     """
     models = ['Baseline', 'Fair Model']
     accs = [metrics_baseline['accuracy'], metrics_fair['accuracy']]
@@ -251,31 +343,37 @@ def plot_comparison(metrics_baseline, metrics_fair, plot_file_path_4, plot_file_
     aucs = [metrics_baseline['auc'], metrics_fair['auc']]
     eo_diff = [metrics_baseline["equalized_odds_difference"], metrics_fair["equalized_odds_difference"]]
 
+    if plot_acc: 
+        focus = accs
+        bar_label = "Accuracy"
+    else: 
+        focus = aucs
+        bar_label = "AUC"
 
-    fig, ax1 = plt.subplots(figsize=(10, 6))
+    fig, ax1 = plt.subplots(figsize=(12, 8))
     ax2 = ax1.twinx()  # Create secondary y-axis
     
-    width = 0.4  # Bar width
-    gap = 0.015   # Space between bars
+    width = 0.4  
+    gap = 0.015  
     x_indexes = np.arange(len(models))
 
     # color blind friendly options
-    color_acc = "#006CD1"  # blue (Accuracy)
-    color_dp = "#994F00"   # brown (Demographic Parity)
+    color_acc = "#006CD1"  # accuracy
+    color_dp = "#994F00"   # demographic parity
 
-    bars1 = ax1.bar(x_indexes - (width/2 + gap), accs, width, color=color_acc, label="Accuracy")
+    bars1 = ax1.bar(x_indexes - (width/2 + gap), focus, width, color=color_acc, label=bar_label)
     bars2 = ax2.bar(x_indexes + (width/2 + gap), dp_diff, width, color=color_dp, label="Demographic \n Parity Difference")
 
     # value is included at the top of the bar
     for bar in bars1:
         ax1.text(bar.get_x() + bar.get_width()/2, bar.get_height(), f'{bar.get_height():.2f}', 
-                 ha='center', va='bottom', fontsize=12, fontweight='bold')
+                 ha='center', va='bottom', fontsize=20, fontweight='bold')
     
     for bar in bars2:
         ax2.text(bar.get_x() + bar.get_width()/2, bar.get_height(), f'{bar.get_height():.2f}', 
-                 ha='center', va='bottom', fontsize=12, fontweight='bold')
+                 ha='center', va='bottom', fontsize=20, fontweight='bold')
 
-    # remove all axis lines (keeping it minimal
+    # remove all axis lines (keeping it minimal)
     for ax in [ax1, ax2]:
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
@@ -284,40 +382,51 @@ def plot_comparison(metrics_baseline, metrics_fair, plot_file_path_4, plot_file_
     ax1.yaxis.set_visible(False)
     ax2.yaxis.set_visible(False)
 
-    # Labels & Titles
     ax1.set_xticks(x_indexes)
-    ax1.set_xticklabels(models, fontsize=12)
-    ax1.set_title("Accuracy & Fairness Comparison", fontsize=14)
+    ax1.set_xticklabels(models, fontsize=24)
+    ax1.set_title(f"{bar_label} & Fairness Comparison", fontsize=24)
 
-    # Legend (smaller and in top right corner)
-    ax1.legend(handles=[bars1, bars2], loc='upper right', fontsize=10)
+    ax1.legend(handles=[bars1, bars2], loc='upper right', fontsize=17, handletextpad=0.5, handlelength=1)
 
-    # Save plot
     plt.tight_layout()
     plt.savefig(plot_file_path_2, bbox_inches="tight")
     plt.close()
 
     ## plot with all 4 metrics
-    
-    # Creating a 2x2 grid of bar charts comparing metrics
-    fig, axs = plt.subplots(2, 2, figsize=(14, 10))
+    fig, axs = plt.subplots(2, 2, figsize=(14, 12))
 
-    axs[0, 0].bar(models, aucs, color=['blue', 'green'])
-    axs[0, 0].set_title('AUC')
+    # auc
+    bars = axs[0, 0].bar(models, aucs, color=['blue', 'green'])
+    axs[0, 0].set_title('AUC', fontsize=20)
     axs[0, 0].set_ylim([0, 1])
-
-    axs[0, 1].bar(models, accs, color=['blue', 'green'])
-    axs[0, 1].set_title('Accuracy')
+    axs[0, 0].bar_label(bars, labels=[f'{v:.2f}' for v in aucs], padding=3, fontsize=18)
+        
+    # accuracy
+    bars = axs[0, 1].bar(models, accs, color=['blue', 'green'])
+    axs[0, 1].set_title('Accuracy', fontsize=20)
     axs[0, 1].set_ylim([0, 1])
+    axs[0, 1].bar_label(bars, labels=[f'{v:.2f}' for v in accs], padding=3, fontsize=18)
 
-    axs[1, 0].bar(models, dp_diff, color=['orange', 'purple'])
-    axs[1, 0].set_title('Demographic Parity Difference')
+    # demographic parity
+    bars = axs[1, 0].bar(models, dp_diff, color=['orange', 'purple'])
+    axs[1, 0].set_title('Demographic Parity Difference', fontsize=20)
+    axs[1, 0].set_ylim([0, 1])
+    axs[1, 0].bar_label(bars, labels=[f'{v:.2f}' for v in dp_diff], padding=3, fontsize=18)
 
-    axs[1, 1].bar(models, eo_diff, color=['orange', 'purple'])
-    axs[1, 1].set_title('Equalized Odds Difference')
+    # equalized odds
+    bars = axs[1, 1].bar(models, eo_diff, color=['orange', 'purple'])
+    axs[1, 1].set_title('Equalized Odds Difference', fontsize=20)
+    axs[1, 1].set_ylim([0, 1])
+    axs[1, 1].bar_label(bars, labels=[f'{v:.2f}' for v in eo_diff], padding=3, fontsize=18)
 
-    # plt.suptitle("Comparison: Baseline (X → Y) vs. Fair (X → Y') Model")
-    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+    for ax in axs.flat:
+        ax.set_xticklabels(models, fontsize=18)
+
+    plt.suptitle("All Metrics: Baseline (X → Y) vs. Fair (X → Y') Model", fontsize=18)
+    plt.tight_layout(rect=[0, 0, 1, 0.96])  
+    # plt.tight_layout(rect=[0, 0, 1, 0.90])  # Adjust the top margin
+
+    # plt.tight_layout()
 
     plt.savefig(plot_file_path_4, bbox_inches="tight")
     plt.close()
@@ -335,7 +444,6 @@ def main_binary(data_url, dataset_name, lambda_adv=1.0, epochs=64, batch_size=12
     log_file_path = os.path.join(output_path, f'{dataset_name}_results_log.txt')
     plot_file_path_4 = os.path.join(output_path, f'4_{dataset_name}_comparison_plot.png')
     plot_file_path_2 = os.path.join(output_path, f'2_{dataset_name}_comparison_plot.png')
-
 
     def log(message):
         with open(log_file_path, 'a') as f: 
@@ -368,20 +476,23 @@ def main_binary(data_url, dataset_name, lambda_adv=1.0, epochs=64, batch_size=12
         log(f"Features shape: {X.shape}")
         log(f"Observed Label Y shape: {Y_obs.shape}   (Recidivism: 1=recid, 0=non-recid)")
         log(f"Sensitive Attribute (Race, binarized) shape: {S.shape}")
+        plot_acc = False
         
     elif dataset_name == "german": 
         log(f"Features shape: {X.shape}")
         log(f"Observed Label Y shape: {Y_obs.shape}   (Credit risk: 1=good, 0=bad)")
         log(f"Sensitive Attribute (Age, binarized) shape: {S.shape}")
+        plot_acc = True
         
     elif dataset_name == "adult":
         log(f"Features shape: {X.shape}")
         log(f"Observed Label Y shape: {Y_obs.shape}   (Label from 'income')")
         log(f"Sensitive Attribute (Sex) shape: {S.shape}")
+        plot_acc = True
 
     input_dim = X_train.shape[1]
 
-      # One-hot encode S for adversarial model training.
+    # One-hot encode S for adversarial model training.
     S_train_oh = tf.keras.utils.to_categorical(S_train, num_classes=2)
     S_test_oh  = tf.keras.utils.to_categorical(S_test, num_classes=2)
 
@@ -402,13 +513,12 @@ def main_binary(data_url, dataset_name, lambda_adv=1.0, epochs=64, batch_size=12
     Y_pred_train_bin = (pseudo_Y_train > 0.5).astype(np.float32)
     Y_pred_test_bin  = (pseudo_Y_test > 0.5).astype(np.float32)
 
-
     log("\nPseudo-label statistics (training):")
     for g in np.unique(S_train):
         mask = (S_train == g)
         log(f"Group {g} pseudo-positive rate: {np.mean(Y_pred_train_bin[mask]):.4f}") # average probability of a postive prediction per group -- fairness check to see if both groups receive similar treatment
  
-    # Train baseline logistic regression model on observed Y (X → Y) -- regular logistic regression for baseline for comparison; does not include any fairness constraints
+    # Regular logistic regression for baseline for comparison; does not include any fairness constraints
     log("\nTraining baseline logistic regression classifier (X → Y)...")
     baseline_clf = LogisticRegression(solver='lbfgs', max_iter=1000)
     baseline_clf.fit(X_train, Y_train_obs)
@@ -449,7 +559,7 @@ def main_binary(data_url, dataset_name, lambda_adv=1.0, epochs=64, batch_size=12
     log(f"Fairness metrics: {fair_fairness}")
 
     # Plot comparison.
-    plot_comparison(metrics_baseline, metrics_fair, plot_file_path_4, plot_file_path_2)
+    plot_comparison(metrics_baseline, metrics_fair, plot_file_path_4, plot_file_path_2, plot_acc=plot_acc)
 
 
 ### UCI ADULTS
@@ -491,6 +601,11 @@ def load_and_preprocess_adult_data(data_url):
     # Sensitive attribute
     S = (data['sex'].str.strip() == 'Male').astype(np.int32).values  # 1-D array
 
+    # adding a bit of noise
+    noise_std = 0.02
+    X = X + np.random.normal(0, noise_std, X.shape)
+    Y = add_label_noise(Y, noise_fraction=0.02)
+
     return X, Y, S
 
 ### GERMAN 
@@ -528,6 +643,11 @@ def load_and_preprocess_german_data(data_url):
     age_vals = data["age"].astype(np.float32).values
     median_age = np.median(age_vals)
     S = (age_vals >= median_age).astype(np.int32)
+
+    # adding a bit of noise -- didn't work for this dataset
+    # noise_std = 0.05 
+    # X = X + np.random.normal(0, noise_std, X.shape)
+    # Y = add_label_noise(Y, noise_fraction=0.02)
 
     return X, Y, S
 
@@ -567,7 +687,42 @@ def load_and_preprocess_compas_data_binary(data_url):
     scaler = StandardScaler()
     X = scaler.fit_transform(X.values)
 
+    # adding a bit of noise
+    # noise_std = 0.05 
+    # X = X + np.random.normal(0, noise_std, X.shape)
+    # Y = add_label_noise(Y, noise_fraction=0.02)
+
     return X, Y, S
+
+
+def add_label_noise(Y, noise_fraction=0.05, num_classes=2, random_seed=42):
+    """
+    Add noise to the labels by randomly flipping a fraction of them.
+
+    Parameters:
+    - Y: NumPy array of shape (n_samples,), containing the original labels.
+    - noise_fraction: Fraction of labels to be changed (e.g., 0.05 for 5% noise).
+    - num_classes: The number of possible classes in Y.
+    - random_seed: Seed for reproducibility.
+
+    Returns:
+    - Y_noisy: The new label array with noise added.
+    """
+    np.random.seed(random_seed)
+    Y_noisy = Y.copy()
+
+    # Number of labels to flip
+    num_noisy_samples = int(len(Y) * noise_fraction)
+
+    # Randomly select indices to modify
+    noisy_indices = np.random.choice(len(Y), num_noisy_samples, replace=False)
+
+    for i in noisy_indices:
+        original_label = Y_noisy[i]
+        possible_labels = [label for label in range(num_classes) if label != original_label]
+        Y_noisy[i] = np.random.choice(possible_labels)  # Assign a new random label
+
+    return Y_noisy
 
 """
 BINARY SYNTHETIC DATA EXPLORATION
@@ -690,31 +845,6 @@ def run_unbiased_logistic(multiClass = False):
     
     return auc, acc, dp_diff, eo_diff
 
-
-def append_text_to_image(image_path, text):
-    """
-    Opens an existing image and appends the given text to the bottom.
-    """
-    img = Image.open(image_path)
-    width, height = img.size
-
-    # Create a new image with additional height for text
-    extra_height = 100  # Adjust if needed
-    new_img = Image.new("RGB", (width, height + extra_height), "white")
-    new_img.paste(img, (0, 0))  # Paste original image
-
-    # Add text below the figure
-    draw = ImageDraw.Draw(new_img)
-    font = ImageFont.load_default()
-
-    text_position = (10, height + 10)
-    draw.text(text_position, text, fill="black", font=font)
-
-    # Save modified image back to original path
-    new_img.save(image_path)
-    # log(f"Updated plot saved with appended results at: {image_path}")
-
-
 # -------------------------------
 # Main Function for binary synthetic data
 # -------------------------------
@@ -801,17 +931,26 @@ def main_synthetic(lambda_adv=1.0, epochs=64, batch_size=128, output_dir='model_
     log(f"AUC: {fair_auc:.4f}, Accuracy: {fair_acc:.4f}")
     log(f"Fairness metrics: {fair_fairness}")
 
+   
+    bf_auc, bf_acc, bf_dp_diff, bf_eo_diff = run_unbiased_logistic()
+    metrics_baseline_fair = {
+        "auc": bf_auc,
+        "accuracy": bf_acc,
+        "demographic_parity_difference": bf_dp_diff,
+        "equalized_odds_difference": bf_eo_diff
+    }
     # Plot comparison.
-    plot_comparison(metrics_baseline, metrics_fair, plot_file_path_4, plot_file_path_2)
-    auc, acc, dp_diff, eo_diff = run_unbiased_logistic() # APPEND THIS TO PLOT PNG THAT IS OUTPUTTED 
+    synthetic_plot_comparison(metrics_baseline_fair, metrics_baseline, metrics_fair, plot_file_path_4, plot_file_path_2)
+    
+
     summary_text = summary_text = (
         f"Fair Unbiased Model Metrics:\n"
-        f"AUC: {auc:.3f}\n"
-        f"Accuracy: {acc:.3f}\n"
-        f"Demographic Parity Diff: {metrics_baseline['demographic_parity_difference']:.3f}\n"
-        f"Equalized Odds Diff: {metrics_baseline['equalized_odds_difference']:.3f}"
+        f"AUC: {bf_auc:.3f}\n"
+        f"Accuracy: {bf_acc:.3f}\n"
+        f"Demographic Parity Diff: {bf_dp_diff}\n"
+        f"Equalized Odds Diff: {bf_eo_diff}"
     )
-    append_text_to_image(plot_file_path, summary_text)
+    log(f"FAIR UNBIASED MODEL:{summary_text}")
 
 """
 Application of Model on Multiclass for Y
@@ -1002,6 +1141,9 @@ def multi_compute_fairness_metrics_manual(y_true, y_pred, sensitive_features, sy
         }
 
 def multi_main(dataset_name="drug_multi", lambda_adv=1.0, epochs=64, batch_size=128, output_dir='model_results'):
+    """
+    Main function for running data with multi-class
+    """
     set_seed(42)
     
     repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -1019,7 +1161,6 @@ def multi_main(dataset_name="drug_multi", lambda_adv=1.0, epochs=64, batch_size=
         log_file_path = os.path.join(output_path, f'{dataset_name}_results_log.txt')
         plot_file_path_4 = os.path.join(output_path, f'4_{dataset_name}_comparison_plot.png')
         plot_file_path_2 = os.path.join(output_path, f'2_{dataset_name}_comparison_plot.png')
-
 
     open(log_file_path, 'w').close() 
 
@@ -1061,7 +1202,6 @@ def multi_main(dataset_name="drug_multi", lambda_adv=1.0, epochs=64, batch_size=
     S_test_oh  = tf.keras.utils.to_categorical(S_test, num_classes=2) 
 
     if dataset_name == "drug_multi":
-
         # need to one hot encode Y
         Y_train_obs = tf.keras.utils.to_categorical(Y_train_obs, num_classes=num_classes_Y)
         Y_test_obs = tf.keras.utils.to_categorical(Y_test_obs, num_classes=num_classes_Y)
@@ -1141,8 +1281,14 @@ def multi_main(dataset_name="drug_multi", lambda_adv=1.0, epochs=64, batch_size=
         fair_auc, fair_acc, fair_fairness = run_biased_logistic(
             X_train, pseudo_Y_train_class, X_test, pseudo_Y_test_class, Y_train_raw, Y_test_raw, S_train, S_test, multiClass=True
         )
-        auc, acc, dp_diff, eo_diff = run_unbiased_logistic(multiClass=True)
-        log(f"COMPLETELY FAIR (before error injection): Baseline: AUC: {auc:.4f}, Accuracy: {acc:.4f}, Demographic Parity Difference: {dp_diff:.4f}, Equalized Odds Difference: {eo_diff:.4f}")
+        bf_auc, bf_acc, bf_dp_diff, bf_eo_diff = run_unbiased_logistic(multiClass=True)
+        metrics_baseline_fair = {
+            "auc": bf_auc,
+            "accuracy": bf_acc,
+            "demographic_parity_difference": bf_dp_diff,
+            "equalized_odds_difference": bf_eo_diff
+        }
+        log(f"COMPLETELY FAIR (before error injection): Baseline: AUC: {bf_auc:.4f}, Accuracy: {bf_acc:.4f}, Demographic Parity Difference: {bf_dp_diff:.4f}, Equalized Odds Difference: {bf_eo_diff:.4f}")
 
     # Aggregate metrics for plotting.
     metrics_baseline = {
@@ -1166,14 +1312,19 @@ def multi_main(dataset_name="drug_multi", lambda_adv=1.0, epochs=64, batch_size=
     log(f"AUC: {fair_auc:.4f}, Accuracy: {fair_acc:.4f}")
     log(f"Fairness metrics: {fair_fairness}")
 
-    # Plot comparison.
-    plot_comparison(metrics_baseline, metrics_fair, plot_file_path_4, plot_file_path_2)
+    if dataset_name == "synthetic":
+        synthetic_plot_comparison(metrics_baseline_fair, metrics_baseline, metrics_fair, plot_file_path_4, plot_file_path_2, plot_acc=False)
+    
+    else:
+        plot_comparison(metrics_baseline, metrics_fair, plot_file_path_4, plot_file_path_2, plot_acc = False)
 
 """
 Multi-Class Real World Dataset
 """
 def load_and_process_drug_consumption_data(path):
-    
+    """
+    Cannabis Consumption Dataset
+    """
     df = pd.read_csv(path)
     df.columns = df.columns.str.lower().str.strip()
     
@@ -1216,12 +1367,12 @@ def load_and_process_drug_consumption_data(path):
     S = df["education"].to_numpy()
     X = X.drop(columns = ["education"])
 
-    return X, Y, S
+    ## Adding a small amount of noise to see what will happen
+    noise_std = 0.02 
+    X = X + np.random.normal(0, noise_std, X.shape)
+    # Y = add_label_noise(Y)  removed this function -tried adding noise to Y but it decreased auc and acc without decreasing demographic parity
+    return X, Y, S ## for results should use AUC and demographic parity
 
-
-"""
-Multi-Class: Synthetic Data
-"""
 
 """
 CROSS VALIDATION FOR REAL WORLD DATASETS
@@ -1344,14 +1495,14 @@ class AdversarialModelWrapperFixed(BaseEstimator, ClassifierMixin):
         )
         
         demographic_parity_diff = abs(fairness_metrics["demographic_parity_difference"])
-        score = auc + acc - demographic_parity_diff
+        alpha = 8
+        score = auc + acc - alpha * demographic_parity_diff
     
         if return_metrics:
             return score, acc, auc, demographic_parity_diff
         return score
 
 def cross_validation_data(dataset_name, data_url, output_file):
-    # Load synthetic dataset
     set_seed(42)
 
     if dataset_name == "compas": 
@@ -1381,15 +1532,15 @@ def cross_validation_data(dataset_name, data_url, output_file):
         Y_train_obs = Y_train_obs.ravel()
 
         param_grid = {
-            "lambda_adv": [1.0, 3.0, 5.0, 7.0, 15.0],
-            "epochs": [32, 64],
+            "lambda_adv": [1.0, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0],
+            "epochs": [64, 72],
             "batch_size": [64, 128]
         }
 
         cv = StratifiedKFold(n_splits=3, shuffle=True, random_state=42)
         results = []
 
-        # Loop over all combinations of hyperparameters
+        # combinations of hyperparameters
         for lambda_adv, epochs, batch_size in product(param_grid["lambda_adv"],
                                                       param_grid["epochs"],
                                                       param_grid["batch_size"]):
@@ -1450,16 +1601,4 @@ def cross_validation_data(dataset_name, data_url, output_file):
         best_params = results_df.loc[results_df["score"].idxmax()]
         f.write("\nBest Hyperparameters:\n")
         f.write(best_params.to_string())
-
-
-
-
-
-
-
-
-
-
-
-
-
+        

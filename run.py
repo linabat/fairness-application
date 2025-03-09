@@ -42,7 +42,7 @@ if __name__ == '__main__':
             config = json.load(file)
         multi_main(**config) 
         
-    if 'synthetic_mutliClass' in args: 
+    if 'synthetic_multiClass' in args: 
         with open("config/synthetic_multiClass.json", "r") as file:
             config = json.load(file)
         multi_main(**config) 

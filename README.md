@@ -1,6 +1,6 @@
-# Fairness Exploration: Latent Feature Discover
+# Applications of Fairness: Label Bias and Recovery of Ground Truth
 
-This quarter we are focusing on the discovery of fair latent variables using an encoder-decoder model. This model will be used on on tabular datasets that have features, X, an identifiable sensitive feature, S, and observed labels, Y. We will see how this algorithm performs on common fairness datasets as well as 2 new datasets that we are further exploring with. 
+Our capstone project focused on the discovery of ground truth labels from lablel bias using an encoder-decoder model. This model will be used on tabular datasets that have features, X, an identifiable sensitive feature, S, and observed labels, Y. We will see how this algorithm performs on common fairness datasets as well as 2 new datasets that we are further exploring with. 
 ## Getting Started
 
 To achieve the same results as we did, follow these steps:
@@ -39,7 +39,7 @@ We looked at synthetic data where we have true unbiased data and data with injec
 
 We then looked at real world data where the the sensitive and observed labels are binary values. For this portion, we looked 3 common datasets used to explore fairness applications: UCI Adults, German Credit Scores, and Compas. 
 
-Let's start by looking at the results for the **UCI adults dataset**. You can find this dataset[here](https://archive.ics.uci.edu/dataset/2/adult). 
+Let's start by looking at the results for the **UCI adults dataset**. You can find this dataset [here](https://archive.ics.uci.edu/dataset/2/adult). 
 **To retrieve results for UCI Adults**
     -Run in terminal
    ```bash

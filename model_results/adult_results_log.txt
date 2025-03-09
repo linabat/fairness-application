@@ -6,17 +6,17 @@ Sensitive Attribute (Sex) shape: (32561,)
 Training adversarial model (X → Y' with adversary) ...
 
 Pseudo-label statistics (training):
-Group 0 pseudo-positive rate: 0.1226
-Group 1 pseudo-positive rate: 0.1540
+Group 0 pseudo-positive rate: 0.1398
+Group 1 pseudo-positive rate: 0.1425
 
 Training baseline logistic regression classifier (X → Y)...
 
 Training fair logistic regression classifier (X → Y') using pseudo-labels...
 
 Baseline Logistic Regression (X → Y) Evaluation:
-AUC: 0.8095, Accuracy: 0.7877
-Fairness metrics: {'demographic_parity_difference': 0.07640872577213828, 'equalized_odds_difference': 0.04111184120536365, 'selection_rate': {0: 0.0799623706491063, 1: 0.15637109642124458}, 'group_accuracy': {0: 0.8715898400752587, 1: 0.7469797127877821}}
+AUC: 0.7178, Accuracy: 0.7335
+Fairness metrics: {'demographic_parity_difference': 0.07595283336274691, 'equalized_odds_difference': 0.06801153441917367, 'selection_rate': {0: 0.0799623706491063, 1: 0.15591520401185321}, 'group_accuracy': {0: 0.8029162746942615, 1: 0.6997948484157739}}
 
 Fair Logistic Regression (X → Y') Evaluation (compared to observed Y):
-AUC: 0.7671, Accuracy: 0.7835
-Fairness metrics: {'demographic_parity_difference': 0.03728518000137668, 'equalized_odds_difference': 0.015502081352629933, 'selection_rate': {0: 0.08466603951081844, 1: 0.12195121951219512}, 'group_accuracy': {0: 0.8631232361241769, 1: 0.7449281969455208}}
+AUC: 0.6950, Accuracy: 0.7304
+Fairness metrics: {'demographic_parity_difference': 0.039926503967829347, 'equalized_odds_difference': 0.03527800151385417, 'selection_rate': {0: 0.0729068673565381, 1: 0.11283337132436745}, 'group_accuracy': {0: 0.7986829727187206, 1: 0.6972874401641213}}

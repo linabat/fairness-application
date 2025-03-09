@@ -1,6 +1,6 @@
 {
-    "lambda_adv":3.0, 
-    "epochs":64, 
+    "lambda_adv":4.0, 
+    "epochs":72, 
     "batch_size":128,
     "output_dir":"model_results"
 }
